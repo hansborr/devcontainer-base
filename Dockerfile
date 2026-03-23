@@ -5,24 +5,39 @@ ENV TZ="$TZ"
 
 # Install basic development tools and iptables/ipset
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  less \
-  git \
-  procps \
-  sudo \
-  fzf \
-  zsh \
-  man-db \
-  unzip \
-  gnupg2 \
-  gh \
-  iptables \
-  ipset \
-  iproute2 \
-  dnsutils \
   aggregate \
+  build-essential \
+  cmake \
+  dnsutils \
+  fd-find \
+  file \
+  fzf \
+  gh \
+  git \
+  gnupg2 \
+  htop \
+  iproute2 \
+  ipset \
+  iptables \
   jq \
+  less \
+  libssl-dev \
+  man-db \
   nano \
+  openssh-client \
+  pkg-config \
+  procps \
+  python3 \
+  python3-pip \
+  python3-venv \
+  ripgrep \
+  sudo \
+  tmux \
+  tree \
+  unzip \
   vim \
+  zip \
+  zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure default node user has access to /usr/local/share
