@@ -1,0 +1,53 @@
+name: ${PROJECT_NAME:-myproject}
+
+services:
+  app:
+    container_name: ${PROJECT_NAME:-myproject}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../:/workspace
+      - claude-config:/home/node/.claude:U
+      - shell-history:/commandhistory:U
+      - npm-cache:/home/node/.npm:U
+      - playwright-cache:/home/node/.cache/ms-playwright:U
+      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+    ports:
+      - "3000:3000"   # App server — adjust to match your project
+      - "5173:5173"   # Vite dev server
+    init: true
+    userns_mode: "keep-id"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    command: bash /workspace/.devcontainer/container-entrypoint.sh
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    container_name: ${PROJECT_NAME:-myproject}_db
+    image: postgres:17
+    pull_policy: missing
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  claude-config:
+  shell-history:
+  npm-cache:
+  playwright-cache:
