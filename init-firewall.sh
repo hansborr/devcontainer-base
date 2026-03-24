@@ -69,24 +69,39 @@ while read -r cidr; do
     ipset add --exist allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
-# Resolve and add other allowed domains
-for domain in \
-    "registry.npmjs.org" \
-    "binaries.prisma.sh" \
-    "api.anthropic.com" \
-    "sentry.io" \
-    "statsig.anthropic.com" \
-    "statsig.com" \
-    "marketplace.visualstudio.com" \
-    "vscode.blob.core.windows.net" \
-    "update.code.visualstudio.com" \
-    "cdn.playwright.dev" \
-    "storage.googleapis.com"; do
+# Resolve and add allowed domains
+# Required domains: failure aborts startup
+REQUIRED_DOMAINS=(
+    "registry.npmjs.org"
+    "api.anthropic.com"
+)
+
+# Optional domains: failure logs a warning but continues
+OPTIONAL_DOMAINS=(
+    "binaries.prisma.sh"
+    "sentry.io"
+    "statsig.anthropic.com"
+    "statsig.com"
+    "marketplace.visualstudio.com"
+    "vscode.blob.core.windows.net"
+    "update.code.visualstudio.com"
+    "cdn.playwright.dev"
+    "storage.googleapis.com"
+)
+
+resolve_and_add() {
+    local domain="$1"
+    local required="$2"
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
-        echo "ERROR: Failed to resolve $domain"
-        exit 1
+        if [ "$required" = "true" ]; then
+            echo "ERROR: Failed to resolve required domain $domain"
+            exit 1
+        else
+            echo "WARN: Failed to resolve optional domain $domain — skipping"
+            return 0
+        fi
     fi
 
     while read -r ip; do
@@ -97,6 +112,14 @@ for domain in \
         echo "Adding $ip for $domain"
         ipset add --exist allowed-domains "$ip"
     done < <(echo "$ips")
+}
+
+for domain in "${REQUIRED_DOMAINS[@]}"; do
+    resolve_and_add "$domain" true
+done
+
+for domain in "${OPTIONAL_DOMAINS[@]}"; do
+    resolve_and_add "$domain" false
 done
 
 # Get host IP from default route
