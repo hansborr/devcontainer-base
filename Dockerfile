@@ -100,11 +100,14 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
     fi
 
-# Copy and set up firewall script
-COPY init-firewall.sh /usr/local/bin/
+# Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
+
+# Copy and set up firewall scripts
+COPY init-firewall.sh fw-install.sh /usr/local/bin/
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 
 # Install Playwright system dependencies for Chromium (baked into image layer;

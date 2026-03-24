@@ -1,23 +1,8 @@
 {
   "name": "Claude Code Sandbox",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
   "workspaceFolder": "/workspace",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
-  "runArgs": [
-    "--init",
-    "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW",
-    "--userns=keep-id"
-  ],
-  "mounts": [
-    "source=claude-config,target=/home/node/.claude,type=volume,U=true",
-    "source=shell-history,target=/commandhistory,type=volume,U=true",
-    "source=npm-cache,target=/home/node/.npm,type=volume,U=true",
-    "source=playwright-cache,target=/home/node/.cache/ms-playwright,type=volume,U=true",
-    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
-  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -46,10 +31,19 @@
     }
   },
   "remoteUser": "node",
+  "mounts": [],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
   },
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh"
+  "forwardPorts": [3000, 5173, 5432],
+  "portsAttributes": {
+    "3000": { "label": "App Server" },
+    "5173": { "label": "Vite Dev Server" },
+    "5432": { "label": "PostgreSQL" }
+  },
+  "postCreateCommand": "npm install",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "waitFor": "postStartCommand"
 }

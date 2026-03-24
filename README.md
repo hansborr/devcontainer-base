@@ -14,11 +14,9 @@ Shared base image and project template for sandboxed Claude Code development con
 - Playwright system dependencies for Chromium
 - iptables firewall that restricts outbound traffic to an allowlist
 
-**Project template** (`.devcontainer/`) — drop-in devcontainer config:
-- Thin Dockerfile inheriting from the base image
-- Docker Compose with app + PostgreSQL
-- VS Code / devcontainer CLI configuration
-- Entrypoint that auto-starts `npm run dev`
+**Project templates** — two drop-in devcontainer configs:
+- `.devcontainer/` — minimal single-container setup, no database, no port forwarding
+- `.devcontainer-postgres/` — full setup with Docker Compose, PostgreSQL, port forwarding, and auto-start entrypoint
 
 ## Quick start
 
@@ -32,15 +30,16 @@ This creates `localhost/claude-devcontainer:latest`.
 
 ### 2. Start a new project
 
-Copy `.devcontainer/` into your project:
+**Minimal** (no database) — copy `.devcontainer/` into your project:
 
 ```bash
 cp -r /path/to/devcontainer-base/.devcontainer ~/my-project/.devcontainer
 ```
 
-Edit the config for your project:
+**With PostgreSQL** — copy `.devcontainer-postgres/` instead:
 
 ```bash
+cp -r /path/to/devcontainer-base/.devcontainer-postgres ~/my-project/.devcontainer
 cd ~/my-project/.devcontainer
 cp .env.example .env
 # Edit .env: set PROJECT_NAME, POSTGRES_DB, etc.
@@ -48,7 +47,7 @@ cp .env.example .env
 # Edit devcontainer.json: adjust forwardPorts, postCreateCommand
 ```
 
-Launch:
+Launch either setup:
 
 ```bash
 devcontainer up \
@@ -105,15 +104,18 @@ USER node
 ## File overview
 
 ```
-Dockerfile              Base image definition
-init-firewall.sh        Firewall allowlist (baked into base)
-build.sh                Builds the base image
-devcontainer-rebuild.sh Teardown + rebuild helper for projects
-.devcontainer/          Project template (copy into your repo)
-  .env.example          Environment variables template
-  Dockerfile            Thin wrapper over base image
-  docker-compose.yml    App + PostgreSQL services
-  devcontainer.json     VS Code / devcontainer CLI config
-  container-entrypoint.sh  Waits for npm install, starts dev servers
-  start-servers.sh      Convenience script to restart dev servers
+Dockerfile                  Base image definition
+init-firewall.sh            Firewall allowlist (baked into base)
+build.sh                    Builds the base image
+devcontainer-rebuild.sh     Teardown + rebuild helper for projects
+.devcontainer/              Minimal template (single container, no DB)
+  Dockerfile                Thin wrapper over base image
+  devcontainer.json         VS Code / devcontainer CLI config
+.devcontainer-postgres/     Full template (app + PostgreSQL)
+  Dockerfile                Thin wrapper over base image
+  docker-compose.yml        App + PostgreSQL services
+  devcontainer.json         VS Code / devcontainer CLI config
+  .env.example              Environment variables template
+  container-entrypoint.sh   Waits for npm install, starts dev servers
+  start-servers.sh          Convenience script to restart dev servers
 ```
