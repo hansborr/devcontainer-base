@@ -1,4 +1,4 @@
-FROM node:22
+FROM node:24
 
 ARG TZ=America/Los_Angeles
 ENV TZ="$TZ"
@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   nano \
   openssh-client \
   pkg-config \
+  poppler-utils \
   procps \
   python3 \
   python3-pip \
@@ -100,15 +101,14 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
     fi
 
-# Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
-RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
-
 # Copy and set up firewall scripts
 COPY init-firewall.sh fw-install.sh /usr/local/bin/
 USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
+# Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
 # Install Playwright system dependencies for Chromium (baked into image layer;
 # browser binary is cached separately via named volume)
