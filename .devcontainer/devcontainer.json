@@ -4,7 +4,7 @@
     "dockerfile": "Dockerfile"
   },
   "workspaceFolder": "/workspace",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,relabel=shared",
   "runArgs": [
     "--init",
     "--cap-add=NET_ADMIN",
@@ -16,7 +16,7 @@
     "source=shell-history,target=/commandhistory,type=volume,U=true",
     "source=npm-cache,target=/home/node/.npm,type=volume,U=true",
     "source=playwright-cache,target=/home/node/.cache/ms-playwright,type=volume,U=true",
-    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
+    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly,relabel=shared"
   ],
   "customizations": {
     "vscode": {

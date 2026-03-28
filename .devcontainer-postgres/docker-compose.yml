@@ -7,12 +7,12 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ../:/workspace
+      - ../:/workspace:z
       - claude-config:/home/node/.claude:U
       - shell-history:/commandhistory:U
       - npm-cache:/home/node/.npm:U
       - playwright-cache:/home/node/.cache/ms-playwright:U
-      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro,z
     ports:
       - "3000:3000"   # App server — adjust to match your project
       - "5173:5173"   # Vite dev server
@@ -21,7 +21,7 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    command: bash /workspace/.devcontainer/container-entrypoint.sh
+    command: /usr/local/bin/container-entrypoint.sh
     depends_on:
       db:
         condition: service_healthy

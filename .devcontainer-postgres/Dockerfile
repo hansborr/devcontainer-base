@@ -1,7 +1,6 @@
 FROM localhost/claude-devcontainer:latest
 
-# Add project-specific setup below. For example:
-# COPY start-servers.sh /usr/local/bin/
-# USER root
-# RUN chmod +x /usr/local/bin/start-servers.sh
-# USER node
+COPY container-entrypoint.sh start-servers.sh /usr/local/bin/
+USER root
+RUN chmod +x /usr/local/bin/container-entrypoint.sh /usr/local/bin/start-servers.sh
+USER node
