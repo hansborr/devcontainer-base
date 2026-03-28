@@ -30,6 +30,7 @@
       }
     }
   },
+  "initializeCommand": "mkdir -p /tmp/${PROJECT_NAME:-myproject}",
   "remoteUser": "node",
   "mounts": [],
   "containerEnv": {

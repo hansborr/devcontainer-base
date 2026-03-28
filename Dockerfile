@@ -22,12 +22,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   jq \
   less \
   libssl-dev \
+  libpq-dev \
   man-db \
+  mold \
   nano \
   openssh-client \
   pkg-config \
   poppler-utils \
   procps \
+  protobuf-compiler \
+  libprotobuf-dev \
+  pkg-config \
   python3 \
   python3-pip \
   python3-venv \
