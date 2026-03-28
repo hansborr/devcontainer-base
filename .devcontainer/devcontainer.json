@@ -12,6 +12,7 @@
     "--userns=keep-id"
   ],
   "mounts": [
+    "source=/tmp/devcontainer,target=/tmp,type=bind,relabel=shared",
     "source=claude-config,target=/home/node/.claude,type=volume,U=true",
     "source=shell-history,target=/commandhistory,type=volume,U=true",
     "source=npm-cache,target=/home/node/.npm,type=volume,U=true",

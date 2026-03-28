@@ -67,6 +67,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
   sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
   rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
+# Enable pnpm via corepack (needs root for /usr/local/bin symlinks)
+RUN corepack enable && corepack install -g pnpm@latest
+
 # Set up non-root user
 USER node
 

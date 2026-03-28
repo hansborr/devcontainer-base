@@ -13,6 +13,7 @@ services:
       - npm-cache:/home/node/.npm:U
       - playwright-cache:/home/node/.cache/ms-playwright:U
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro,z
+      - /tmp/${PROJECT_NAME:-myproject}:/tmp:z
     ports:
       - "3000:3000"   # App server — adjust to match your project
       - "5173:5173"   # Vite dev server
