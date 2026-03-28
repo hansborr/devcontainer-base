@@ -4,7 +4,7 @@ Shared base image and project template for sandboxed Claude Code development con
 
 ## What's in the box
 
-**Base image** (`Dockerfile`) — a batteries-included Node.js 22 dev environment:
+**Base image** (`Dockerfile`) — a batteries-included Node.js 24 dev environment:
 - Zsh with Powerlevel10k, fzf, git-delta
 - Claude Code CLI
 - Rust toolchain
