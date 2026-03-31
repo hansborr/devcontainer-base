@@ -30,7 +30,7 @@
       }
     }
   },
-  "initializeCommand": "mkdir -p /tmp/${PROJECT_NAME:-myproject}",
+  "initializeCommand": "mkdir -p /tmp/${PROJECT_NAME:-myproject} && chmod 1777 /tmp/${PROJECT_NAME:-myproject}",
   "remoteUser": "node",
   "mounts": [],
   "containerEnv": {

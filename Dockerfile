@@ -6,6 +6,7 @@ ENV TZ="$TZ"
 # Install basic development tools and iptables/ipset
 RUN apt-get update && apt-get install -y --no-install-recommends \
   aggregate \
+  bc \
   build-essential \
   cmake \
   dnsutils \
@@ -118,8 +119,7 @@ RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh && \
 # Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
 RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
-# Install Playwright system dependencies for Chromium (baked into image layer;
-# browser binary is cached separately via named volume)
-RUN npx -y playwright install-deps chromium
+# Install Playwright system dependencies and browser binaries
+RUN npx -y playwright install-deps && npx -y playwright install
 
 USER node

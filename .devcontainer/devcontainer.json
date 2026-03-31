@@ -46,7 +46,7 @@
       }
     }
   },
-  "initializeCommand": "mkdir -p /tmp/devcontainer",
+  "initializeCommand": "mkdir -p /tmp/devcontainer && chmod 1777 /tmp/devcontainer",
   "remoteUser": "node",
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
