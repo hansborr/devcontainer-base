@@ -2,6 +2,11 @@
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
 IFS=$'\n\t'       # Stricter word splitting
 
+# Block all IPv6 traffic — the allowlist rules are IPv4-only
+ip6tables -P INPUT DROP 2>/dev/null || true
+ip6tables -P OUTPUT DROP 2>/dev/null || true
+ip6tables -P FORWARD DROP 2>/dev/null || true
+
 # 1. Extract Docker DNS info BEFORE any flushing
 DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
 

@@ -103,8 +103,9 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 
 # Install Claude Code
 RUN curl -fsSL https://claude.ai/install.sh | bash
+# Install bun
+RUN curl -fsSL https://bun.com/install | bash
 
-# Install Rust (required for native npm add-ons)
 ARG INSTALL_RUST=true
 RUN if [ "$INSTALL_RUST" = "true" ]; then \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
@@ -120,6 +121,6 @@ RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh && \
 RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
 # Install Playwright system dependencies and browser binaries
-RUN npx -y playwright install-deps && npx -y playwright install
+RUN npx -y playwright install-deps && npx -y playwright install chromium && npm install -g @playwright/cli@latest
 
 USER node
