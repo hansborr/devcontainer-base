@@ -1,6 +1,7 @@
 # devcontainer-base
 
 Shared base image and project template for sandboxed Claude Code development containers using Podman.
+Initially copied from https://github.com/anthropics/claude-code/tree/main/.devcontainer but modified to suit my needs.
 
 ## What's in the box
 
