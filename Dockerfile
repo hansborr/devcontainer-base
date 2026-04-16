@@ -3,6 +3,10 @@ FROM node:24
 ARG TZ=America/Los_Angeles
 ENV TZ="$TZ"
 
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
 # Install basic development tools and iptables/ipset
 RUN apt-get update && apt-get install -y --no-install-recommends \
   aggregate \
@@ -22,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   iptables \
   jq \
   less \
+  locales \
   libssl-dev \
   libpq-dev \
   man-db \
@@ -46,6 +51,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   zip \
   zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Generate en_US.UTF-8 locale
+RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
