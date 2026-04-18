@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   locales \
   libssl-dev \
   libpq-dev \
+  lsof \
   man-db \
   mold \
   nano \
