@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   openssh-client \
   pkg-config \
   poppler-utils \
+  postgresql-client \
   procps \
   protobuf-compiler \
   libprotobuf-dev \
@@ -43,7 +44,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3 \
   python3-pip \
   python3-venv \
+  redis-tools \
   ripgrep \
+  shellcheck \
+  socat \
   sudo \
   tmux \
   tree \
@@ -83,6 +87,16 @@ RUN ARCH=$(dpkg --print-architecture) && \
   sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
   rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
+# Install hadolint (Dockerfile linter)
+ARG HADOLINT_VERSION=2.12.0
+RUN ARCH=$(dpkg --print-architecture) && \
+  if [ "$ARCH" = "amd64" ]; then HADOLINT_ARCH="x86_64"; else HADOLINT_ARCH="arm64"; fi && \
+  wget -O /usr/local/bin/hadolint "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-${HADOLINT_ARCH}" && \
+  chmod +x /usr/local/bin/hadolint
+
+# Install Python CLI tools
+RUN pip install --break-system-packages codespell yamllint
+
 # Enable pnpm via corepack (needs root for /usr/local/bin symlinks)
 RUN corepack enable && corepack install -g pnpm@latest
 
@@ -120,6 +134,14 @@ ARG INSTALL_RUST=true
 RUN if [ "$INSTALL_RUST" = "true" ]; then \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
     fi
+
+# Install Rust cargo tools via cargo-binstall (fast pre-built binary installs)
+RUN if [ "$INSTALL_RUST" = "true" ]; then \
+      . "$HOME/.cargo/env" && \
+      curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash && \
+      cargo binstall -y --no-symlinks sccache just cargo-nextest; \
+    fi
+ENV RUSTC_WRAPPER=sccache
 
 # Copy and set up firewall scripts
 COPY init-firewall.sh fw-install.sh /usr/local/bin/

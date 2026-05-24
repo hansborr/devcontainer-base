@@ -95,6 +95,13 @@ OPTIONAL_DOMAINS=(
     "update.code.visualstudio.com"
     "cdn.playwright.dev"
     "storage.googleapis.com"
+    "api.openai.com"
+    "cdn.openai.com"
+    "auth0.openai.com"
+    "chatgpt.com"
+    "ab.chatgpt.com"
+    "pypi.org"
+    "files.pythonhosted.org"
 )
 
 resolve_and_add() {
