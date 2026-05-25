@@ -98,6 +98,7 @@ OPTIONAL_DOMAINS=(
     "storage.googleapis.com"
     "api.openai.com"
     "cdn.openai.com"
+    "auth.openai.com"
     "auth0.openai.com"
     "chatgpt.com"
     "ab.chatgpt.com"
