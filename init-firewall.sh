@@ -79,6 +79,7 @@ done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 REQUIRED_DOMAINS=(
     "registry.npmjs.org"
     "api.anthropic.com"
+    "downloads.claude.ai"
     "index.crates.io"
     "static.crates.io"
     "static.rust-lang.org"
