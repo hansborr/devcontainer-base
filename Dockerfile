@@ -75,8 +75,8 @@ RUN mkdir /commandhistory \
 ENV DEVCONTAINER=true
 
 # Create workspace and config directories and set permissions
-RUN mkdir -p /workspace /home/node/.claude && \
-  chown -R node:node /workspace /home/node/.claude
+RUN mkdir -p /workspace /home/node/.claude /home/node/.codex && \
+  chown -R node:node /workspace /home/node/.claude /home/node/.codex
 
 WORKDIR /workspace
 
@@ -124,8 +124,9 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export HISTFILE=/commandhistory/.zsh_history && export HISTSIZE=10000 && export SAVEHIST=10000 && setopt INC_APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE" \
   -x
 
-# Install Claude Code
+# Install Claude Code and OpenAI Codex
 RUN curl -fsSL https://claude.ai/install.sh | bash
+RUN npm install -g @openai/codex
 # Install bun
 RUN curl -fsSL https://bun.com/install | bash
 

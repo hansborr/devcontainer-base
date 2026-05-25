@@ -9,6 +9,7 @@ services:
     volumes:
       - ../:/workspace:z
       - claude-config:/home/node/.claude:U
+      - codex-config:/home/node/.codex:U
       - shell-history:/commandhistory:U
       - npm-cache:/home/node/.npm:U
       - playwright-cache:/home/node/.cache/ms-playwright:U
@@ -49,6 +50,7 @@ services:
 volumes:
   postgres-data:
   claude-config:
+  codex-config:
   shell-history:
   npm-cache:
   playwright-cache:
