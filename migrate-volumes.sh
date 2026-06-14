@@ -23,11 +23,20 @@ set -euo pipefail
 # NOTE: the backup tars contain your auth tokens and (for 'persist') your
 # encrypted SSH key. Treat the backup directory as sensitive.
 
-# Names matched anywhere (substring), plus an exact match for 'persist'.
-PATTERN='claude-config|codex-config|claude-code-config|claude-code-bashhistory|shell-history|^persist$'
+# Allowlist of what to migrate. PROJECTS are compose project names (namespaced
+# by each repo's .env PROJECT_NAME, e.g. musi -> musi_claude-config); add a
+# project here as you create one. GLOBALS are exact, unnamespaced volume names.
+# Only auth/config/history volumes are carried — not Postgres/Redis or caches.
+PROJECTS=(musi matoki)
+GLOBALS=(persist)
+TYPES='claude-config|codex-config|shell-history|bash-history'
 
 matching_volumes() {
-    podman volume ls --format '{{.Name}}' | grep -E "$PATTERN" || true
+    local proj glob pattern
+    proj=$(IFS='|'; echo "${PROJECTS[*]}")
+    glob=$(IFS='|'; echo "${GLOBALS[*]}")
+    pattern="^(${proj})_(${TYPES})\$|^(${glob})\$"
+    podman volume ls --format '{{.Name}}' | grep -E "$pattern" || true
 }
 
 cmd="${1:-}"
