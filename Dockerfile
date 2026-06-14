@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   fd-find \
   file \
   fzf \
+  gawk \
   gh \
   git \
   gnupg2 \
@@ -45,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   redis-tools \
   ripgrep \
+  rsync \
   shellcheck \
   socat \
   sudo \
