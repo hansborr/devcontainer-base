@@ -8,6 +8,10 @@ REPO_DIR="${1:-.}"
 REPO_DIR="$(cd "$REPO_DIR" && pwd)"
 COMPOSE_FILE="$REPO_DIR/.devcontainer/docker-compose.yml"
 
+# The shared cross-project 'persist' volume is declared `external` in the compose
+# templates, so it must exist before launch. Create it once, idempotently.
+podman volume create persist >/dev/null 2>&1 || true
+
 if [ -f "$COMPOSE_FILE" ]; then
     echo "Tearing down existing containers (compose)..."
     podman-compose -f "$COMPOSE_FILE" down

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A shared Podman base image and project template for sandboxed Claude Code devcontainers. Two layers:
 
-1. **Base image** (root `Dockerfile`) — built once via `./build.sh`, tagged `localhost/claude-devcontainer:latest`. Contains Node.js 22, zsh, Claude Code CLI, Rust, Python 3, build tools, Playwright deps, and an iptables firewall.
+1. **Base image** (root `Dockerfile`) — built once via `./build.sh`, tagged `localhost/claude-devcontainer:latest`. Contains Node.js 24, zsh, Claude Code CLI, OpenAI Codex CLI, Rust (with `rust-analyzer`), the TypeScript language server, Python 3, build tools, Playwright deps, and an iptables firewall.
 2. **Project templates** — copied into new project repos as `.devcontainer/`:
    - `.devcontainer/` — **minimal** (default). Single container, no database, no port forwarding, no compose. Just `devcontainer.json` + thin `Dockerfile`.
    - `.devcontainer-postgres/` — **full**. Docker Compose with app + PostgreSQL, port forwarding, entrypoint that auto-starts `npm run dev`.
@@ -14,8 +14,12 @@ A shared Podman base image and project template for sandboxed Claude Code devcon
 ## Commands
 
 ```bash
-./build.sh                              # Build/rebuild the base image
-./devcontainer-rebuild.sh ~/repos/foo   # Teardown + relaunch a project's containers
+./build.sh                                # Build/rebuild the base image
+./devcontainer-rebuild.sh ~/repos/foo     # Teardown + relaunch a project's containers
+./seed-ssh-key.sh                         # One-time: copy ~/.ssh into the shared 'persist' volume
+./migrate-volumes.sh list                 # Show which Claude/Codex/persist volumes exist
+./migrate-volumes.sh backup ~/dc-backup   # Back up those volumes (for moving to another machine)
+./migrate-volumes.sh restore ~/dc-backup  # Restore them on the new machine (before ./build.sh)
 ```
 
 Containers are launched with `devcontainer up` using Podman:
@@ -30,7 +34,17 @@ devcontainer up --workspace-folder . --docker-path podman --docker-compose-path 
 - `.devcontainer/devcontainer.json` — minimal template. Uses `runArgs` for `--init`, `--cap-add`, `--userns=keep-id` (no compose needed). Mounts named volumes directly.
 - `.devcontainer-postgres/docker-compose.yml` — full template compose file. App service uses `init: true` (catatonit as PID 1 for zombie reaping), `userns_mode: "keep-id"` for rootless Podman UID mapping, and `cap_add: NET_ADMIN/NET_RAW` for the firewall.
 - `.devcontainer-postgres/container-entrypoint.sh` — waits up to 10 minutes for `node_modules` (postCreateCommand may still be running), starts `npm run dev` in background, then `exec sleep infinity`. Logs to `/workspace/logs/dev-servers.log`.
-- Named volumes (`claude-config`, `shell-history`, `npm-cache`, `playwright-cache`) persist across container rebuilds. The `:U` suffix maps ownership for rootless Podman.
+- Named volumes persist across container rebuilds; the `:U` suffix maps ownership for rootless Podman. Per-project (compose-namespaced) volumes: `claude-config` (`~/.claude`), `codex-config` (`~/.codex`), `shell-history`, `npm-cache`, `playwright-cache`. One **shared, cross-project** volume: `persist` (`/home/node/persist`), declared `external` in the compose templates so every project sees the same files — create it once with `podman volume create persist` (`devcontainer-rebuild.sh` does this for you).
+- **Codex** is installed in the base image via the native standalone installer (`chatgpt.com/codex/install.sh`), replacing the old `npm i -g @openai/codex`. The binary + bundled `rg`/`bwrap` live in the image at `/home/node/.codex-dist` (build-time `CODEX_HOME`), so they update on image rebuilds and are never shadowed by a volume; at runtime `CODEX_HOME=/home/node/.codex` (the `codex-config` volume) holds only `auth.json`/`config.toml`, so logins persist. The launcher is the symlink `~/.local/bin/codex`.
+
+### Where state lives (persistence model)
+
+- `/workspace` — your project code (bind mount to the host repo; version-controlled). Survives everything.
+- `/home/node/persist` — **shared** cross-project scratch (notes, tools, downloads) on the `persist` volume. Survives rebuilds and is visible in every container. This is the right home for personal/persistent files you'd otherwise scatter loosely in `/home/node`.
+- `~/.claude`, `~/.codex` — per-project config volumes (auth, history, settings). Survive rebuilds.
+- `~/.ssh` — a symlink to `/home/node/persist/.ssh`; seed it once with `./seed-ssh-key.sh`. The encrypted key rides the shared `persist` volume (don't cache its passphrase in a long-lived in-container ssh-agent). We deliberately avoid bind-mounting `~/.ssh`: under enforcing SELinux that would relabel `authorized_keys` and can lock `sshd` out on the host.
+- `/tmp` — bind to the host's `/tmp/<project>`; survives rebuilds but is cleared on host reboot.
+- **Anything else under `/home/node` (loose files, `~/tmp`, etc.) lives only in the container layer and is LOST on rebuild.** Put it in `/home/node/persist` instead.
 
 ### Rebuild chain
 
@@ -51,7 +65,13 @@ The container runs as user `node` (non-root). The firewall and `fw-install` scri
 
 **Minimal:** Copy `.devcontainer/` into the project. No further configuration needed.
 
-**Postgres:** Copy `.devcontainer-postgres/` into the project as `.devcontainer/`, then `cp .env.example .env` and set `PROJECT_NAME`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`. The compose file uses `${PROJECT_NAME}` to namespace container names and volumes.
+**Postgres:** Copy `.devcontainer-postgres/` into the project as `.devcontainer/`, then `cp .env.example .env` and set `PROJECT_NAME`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`. The compose file uses `${PROJECT_NAME}` to namespace container names and volumes. The shared `persist` volume is `external`, so it must exist before launch — `devcontainer-rebuild.sh` runs `podman volume create persist` for you (or do it manually once).
+
+To make your SSH key available in containers, run `./seed-ssh-key.sh` once on the host; it copies `~/.ssh` into the `persist` volume, which every container exposes at `~/.ssh`.
+
+### Migrating to another machine
+
+Claude/Codex state and the shared scratch live in Podman named volumes, not on the host filesystem. To move them: on the old machine `./migrate-volumes.sh backup ~/dc-backup`, copy `~/dc-backup` over, then on the new machine `./migrate-volumes.sh restore ~/dc-backup` **before** `./build.sh` and rebuilding each project. Volume names (including compose-namespaced ones like `musi_claude-config`) are preserved, so they line up as long as each project's `.env` `PROJECT_NAME` matches. The backup contains auth tokens and your encrypted SSH key — keep it private.
 
 ## Firewall domain management
 

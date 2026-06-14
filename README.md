@@ -7,8 +7,9 @@ Initially copied from https://github.com/anthropics/claude-code/tree/main/.devco
 
 **Base image** (`Dockerfile`) — a batteries-included Node.js 24 dev environment:
 - Zsh with Powerlevel10k, fzf, git-delta
-- Claude Code CLI
-- Rust toolchain
+- Claude Code CLI and OpenAI Codex CLI
+- Rust toolchain (with `rust-analyzer`)
+- TypeScript language server (`tsc` + `typescript-language-server`)
 - Python 3 with pip/venv
 - Build tools (gcc, make, cmake, pkg-config, libssl-dev)
 - ripgrep, fd-find, htop, tmux, tree
@@ -65,6 +66,31 @@ After updating the base image, use the helper script to teardown and rebuild:
 ./devcontainer-rebuild.sh ~/my-project
 ```
 
+## Persistence and SSH keys
+
+State lives in three places:
+
+- **`/workspace`** — your project code (bind-mounted from the host, version-controlled).
+- **Per-project volumes** — `~/.claude` and `~/.codex` (auth, history, settings), shell history, and caches. They survive container rebuilds but are separate per project, so you log in to Claude/Codex once per project.
+- **`/home/node/persist`** — a single volume **shared across every project**. Put personal scratch, notes, and downloaded tools here instead of loose in `/home/node`, which is wiped on rebuild. Create it once with `podman volume create persist` (the rebuild helper does this automatically).
+
+**SSH key:** run `./seed-ssh-key.sh` once on the host. It copies your `~/.ssh` into the `persist` volume; every container then exposes it at `~/.ssh` via a symlink. Your key stays encrypted, and your real `~/.ssh` is never bind-mounted or SELinux-relabeled — relabeling it would risk locking `sshd` out of the host. Keep the passphrase out of any long-lived in-container `ssh-agent`.
+
+## Moving to another machine
+
+Claude/Codex logins, history, and the shared scratch are Podman volumes, not host files. To migrate:
+
+```bash
+# On the old machine:
+./migrate-volumes.sh backup ~/dc-backup
+# copy ~/dc-backup to the new machine (rsync/scp), then on the new machine:
+./migrate-volumes.sh restore ~/dc-backup
+./build.sh
+./devcontainer-rebuild.sh ~/repos/<each-project>
+```
+
+`./migrate-volumes.sh list` shows exactly what will be backed up. The backup contains auth tokens and your encrypted SSH key — store it securely.
+
 ## Firewall
 
 The base image includes a firewall script (`init-firewall.sh`) that runs at container start via `postStartCommand`. It sets iptables to DROP by default and only allows outbound traffic to:
@@ -109,6 +135,8 @@ Dockerfile                  Base image definition
 init-firewall.sh            Firewall allowlist (baked into base)
 build.sh                    Builds the base image
 devcontainer-rebuild.sh     Teardown + rebuild helper for projects
+seed-ssh-key.sh             Copy ~/.ssh into the shared 'persist' volume (run once)
+migrate-volumes.sh          Back up / restore Claude + Codex + persist volumes
 .devcontainer/              Minimal template (single container, no DB)
   Dockerfile                Thin wrapper over base image
   devcontainer.json         VS Code / devcontainer CLI config

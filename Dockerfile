@@ -124,15 +124,48 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export HISTFILE=/commandhistory/.zsh_history && export HISTSIZE=10000 && export SAVEHIST=10000 && setopt INC_APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE" \
   -x
 
-# Install Claude Code and OpenAI Codex
+# Install Claude Code
 RUN curl -fsSL https://claude.ai/install.sh | bash
-RUN npm install -g @openai/codex
+
+# Install the TypeScript language server (and tsc) for editor/agent LSP support
+RUN npm install -g typescript typescript-language-server
+
+# Install OpenAI Codex via the native standalone installer.
+#
+# The installer puts a launcher symlink in CODEX_INSTALL_DIR and the actual binary
+# (plus bundled ripgrep/bubblewrap) under $CODEX_HOME/packages/standalone. We split
+# those two locations on purpose:
+#   - build-time CODEX_HOME=/home/node/.codex-dist  -> binary lives in the image
+#     layer: it survives rebuilds, is refreshed when the image is rebuilt, and is
+#     never shadowed by the runtime volume mount.
+#   - runtime  CODEX_HOME=/home/node/.codex         -> a persistent volume holding
+#     only auth.json/config.toml, so `codex login` survives container rebuilds.
+# The launcher in ~/.local/bin is an absolute symlink into /home/node/.codex-dist,
+# so it keeps working even though /home/node/.codex is a volume mount at runtime.
+ENV PATH=$PATH:/home/node/.local/bin
+RUN CODEX_HOME=/home/node/.codex-dist \
+    CODEX_INSTALL_DIR=/home/node/.local/bin \
+    CODEX_NON_INTERACTIVE=1 \
+    curl -fsSL https://chatgpt.com/codex/install.sh | sh
+# Runtime state dir: codex reads config.toml + credentials from $CODEX_HOME (the
+# codex-config volume), so logins persist. Per codex-rs core/src/config, CODEX_HOME
+# overrides the ~/.codex default. The binary + bundled rg/bwrap stay in the image at
+# /home/node/.codex-dist/packages/standalone/current/{bin/codex,codex-path/rg,codex-resources/bwrap}.
+ENV CODEX_HOME=/home/node/.codex
+
+# Make ~/.ssh resolve to the shared 'persist' volume (seed it once on the host with
+# seed-ssh-key.sh). Keeps the encrypted key out of the image and avoids relabeling
+# the host's ~/.ssh under SELinux.
+RUN ln -sfn /home/node/persist/.ssh /home/node/.ssh
+
 # Install bun
 RUN curl -fsSL https://bun.com/install | bash
 
 ARG INSTALL_RUST=true
 RUN if [ "$INSTALL_RUST" = "true" ]; then \
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+      . "$HOME/.cargo/env" && \
+      rustup component add rust-analyzer rust-src; \
     fi
 
 # Install Rust cargo tools via cargo-binstall (fast pre-built binary installs)

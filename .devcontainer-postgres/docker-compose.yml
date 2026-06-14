@@ -13,6 +13,7 @@ services:
       - shell-history:/commandhistory:U
       - npm-cache:/home/node/.npm:U
       - playwright-cache:/home/node/.cache/ms-playwright:U
+      - persist:/home/node/persist:U
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro,z
       - /tmp/${PROJECT_NAME:-myproject}:/tmp:z
     ports:
@@ -54,3 +55,8 @@ volumes:
   shell-history:
   npm-cache:
   playwright-cache:
+  # Shared across every project (note: external — create once with
+  # `podman volume create persist`). Holds cross-rebuild scratch and your
+  # seeded ~/.ssh. devcontainer-rebuild.sh creates it for you.
+  persist:
+    external: true
