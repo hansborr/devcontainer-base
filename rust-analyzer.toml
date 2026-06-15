@@ -1,0 +1,8 @@
+# User-global rust-analyzer config, baked into the base image at
+# ~/.config/rust-analyzer/rust-analyzer.toml. Applies to every Rust project in
+# every container (keys drop the `rust-analyzer.` prefix vs. editor settings).
+# Tuned to keep memory/CPU in check on an 8-logical-core host.
+
+cachePriming.enable = false   # skip the upfront whole-workspace indexing spike
+numThreads = 4                # cap worker threads (host has 8 logical cores)
+lru.capacity = 64             # cap cached syntax trees below the default 128

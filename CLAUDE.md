@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A shared Podman base image and project template for sandboxed Claude Code devcontainers. Two layers:
 
-1. **Base image** (root `Dockerfile`) — built once via `./build.sh`, tagged `localhost/claude-devcontainer:latest`. Contains Node.js 24, zsh, Claude Code CLI, OpenAI Codex CLI, Rust (with `rust-analyzer`), the TypeScript language server, Python 3, build tools, Playwright deps, and an iptables firewall.
+1. **Base image** (root `Dockerfile`) — built once via `./build.sh`, tagged `localhost/claude-devcontainer:latest`. Contains Node.js 24, zsh, Claude Code CLI, OpenAI Codex CLI, Rust (with `rust-analyzer`), the TypeScript language server, Python 3, build tools, Playwright deps, and an iptables firewall. It also bakes in a shared ssh-agent and the `claude`/`codex` skip-prompt aliases (see [Shell defaults](#shell-defaults-baked-into-the-image)).
 2. **Project templates** — copied into new project repos as `.devcontainer/`:
    - `.devcontainer/` — **minimal** (default). Single container, no database, no port forwarding, no compose. Just `devcontainer.json` + thin `Dockerfile`.
    - `.devcontainer-postgres/` — **full**. Docker Compose with app + PostgreSQL, port forwarding, entrypoint that auto-starts `npm run dev`.
@@ -42,7 +42,7 @@ devcontainer up --workspace-folder . --docker-path podman --docker-compose-path 
 - `/workspace` — your project code (bind mount to the host repo; version-controlled). Survives everything.
 - `/home/node/persist` — **shared** cross-project scratch (notes, tools, downloads) on the `persist` volume. Survives rebuilds and is visible in every container. This is the right home for personal/persistent files you'd otherwise scatter loosely in `/home/node`.
 - `~/.claude`, `~/.codex` — per-project config volumes (auth, history, settings). Survive rebuilds.
-- `~/.ssh` — a symlink to `/home/node/persist/.ssh`; seed it once with `./seed-ssh-key.sh`. The encrypted key rides the shared `persist` volume (don't cache its passphrase in a long-lived in-container ssh-agent). We deliberately avoid bind-mounting `~/.ssh`: under enforcing SELinux that would relabel `authorized_keys` and can lock `sshd` out on the host.
+- `~/.ssh` — a symlink to `/home/node/persist/.ssh`; seed it once with `./seed-ssh-key.sh`. The encrypted key rides the shared `persist` volume. We deliberately avoid bind-mounting `~/.ssh`: under enforcing SELinux that would relabel `authorized_keys` and can lock `sshd` out on the host. The shared ssh-agent ([Shell defaults](#shell-defaults-baked-into-the-image)) unlocks the key into a container-local agent process — the *decrypted* key lives only in that process's memory, never on the `persist` volume; only the agent's rendezvous socket (`~/.ssh/agent.sock`) sits there.
 - `/tmp` — bind to the host's `/tmp/<project>`; survives rebuilds but is cleared on host reboot.
 - **Anything else under `/home/node` (loose files, `~/tmp`, etc.) lives only in the container layer and is LOST on rebuild.** Put it in `/home/node/persist` instead.
 
@@ -60,6 +60,14 @@ The container runs as user `node` (non-root). The firewall and `fw-install` scri
 1. `postCreateCommand` (`npm install`) — runs once on first container create
 2. `postStartCommand` (`sudo /usr/local/bin/init-firewall.sh`) — runs on every start
 3. `container-entrypoint.sh` — the container's main `command`, waits for npm install then starts dev servers
+
+### Shell defaults baked into the image
+
+These are baked into the base image (in the `Dockerfile`), so they survive rebuilds and never need recreating inside a running container:
+
+- **Shared ssh-agent.** `ssh-agent-init.sh` is copied to `/usr/local/bin/` and sourced from the image's `~/.zshenv`. Because zsh sources `~/.zshenv` for *every* invocation — interactive `podman exec` shells **and** Claude Code's non-interactive Bash tool — all of them rendezvous on one agent at the fixed socket `~/.ssh/agent.sock` instead of each spawning a throwaway agent on a random path. The script (re)starts an agent only when none is listening (`ssh-add -l` exit 2 ⇒ stale socket, replace it). Interactive shells with a tty prompt once to unlock `~/.ssh/id_ed25519` if it exists; the non-interactive Bash tool skips the prompt and never blocks. `ssh_config_github.conf` is baked to `/etc/ssh/ssh_config.d/10-devcontainer.conf` (`AddKeysToAgent`/`IdentitiesOnly` for `github.com`); a seeded `~/.ssh/config` is read first and still wins. The socket sits on the shared `persist` volume, so concurrently-running project containers can reach the same agent; the restart logic self-heals a socket left behind by a stopped container.
+- **Agent aliases.** `~/.zshrc` (interactive shells only) aliases `claude` → `claude --dangerously-skip-permissions` and `codex` → `codex --yolo`. These apply only when you type the command interactively; the Bash tool runs non-interactively, so it is unaffected.
+- **rust-analyzer caps.** `rust-analyzer.toml` is copied to `~/.config/rust-analyzer/rust-analyzer.toml`, rust-analyzer's user-global config (keys drop the `rust-analyzer.` prefix). It disables `cachePriming` (no upfront whole-workspace indexing spike), caps `numThreads = 4` (host has 8 logical cores), and lowers `lru.capacity = 64` (cached syntax trees, default 128) to keep memory in check across every Rust project.
 
 ### Template setup for new projects
 

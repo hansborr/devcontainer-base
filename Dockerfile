@@ -178,10 +178,16 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
     fi
 ENV RUSTC_WRAPPER=sccache
 
-# Copy and set up firewall scripts
-COPY init-firewall.sh fw-install.sh /usr/local/bin/
+# User-global rust-analyzer config (memory/CPU caps). Lives in the image layer,
+# so it applies to every Rust project and survives rebuilds.
+COPY --chown=node:node rust-analyzer.toml /home/node/.config/rust-analyzer/rust-analyzer.toml
+
+# Copy and set up firewall scripts + the shared ssh-agent bootstrap
+COPY init-firewall.sh fw-install.sh ssh-agent-init.sh /usr/local/bin/
+COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/ssh-agent-init.sh && \
+  chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 # Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
@@ -201,3 +207,17 @@ RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 RUN npx -y playwright install-deps && npx -y playwright install chromium && npm install -g @playwright/cli@latest
 
 USER node
+
+# Bake the shared ssh-agent hook into ~/.zshenv (sourced by every zsh, including
+# Claude Code's non-interactive Bash tool) and the agent aliases into ~/.zshrc
+# (interactive shells). Both files are image layers, so these survive container
+# rebuilds and never need to be recreated in a running container.
+RUN printf '\n%s\n%s\n' \
+      '# Shared ssh-agent (fixed socket) for all shells, incl. Claude Code Bash tool' \
+      '[ -f /usr/local/bin/ssh-agent-init.sh ] && source /usr/local/bin/ssh-agent-init.sh' \
+      >> /home/node/.zshenv && \
+    printf '\n%s\n%s\n%s\n' \
+      '# Sandbox devcontainer: default the agents to skip-prompt modes' \
+      "alias claude='claude --dangerously-skip-permissions'" \
+      "alias codex='codex --yolo'" \
+      >> /home/node/.zshrc
