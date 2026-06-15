@@ -187,6 +187,16 @@ RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh && \
 # Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
 RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
+# Prefer IPv4 over IPv6 in glibc name resolution.
+# This container black-holes IPv6 loopback: `::1` is assigned to `lo` but
+# packets to it are silently dropped (not refused), and `localhost` otherwise
+# sorts to `::1` first (RFC 6724 default precedence) while dev services bind
+# IPv4-only. Without this, curl / Node / Rust / psql hang on `::1` until the
+# connect timeout instead of failing fast on 127.0.0.1, breaking readiness
+# loops and stalling `playwright install` downloads. Bumping the IPv4-mapped
+# prefix above ::/0 makes getaddrinfo return 127.0.0.1 ahead of ::1.
+RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
+
 # Install Playwright system dependencies and browser binaries
 RUN npx -y playwright install-deps && npx -y playwright install chromium && npm install -g @playwright/cli@latest
 
