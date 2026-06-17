@@ -202,14 +202,14 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
 # so it applies to every Rust project and survives rebuilds.
 COPY --chown=node:node rust-analyzer.toml /home/node/.config/rust-analyzer/rust-analyzer.toml
 
-# Copy and set up firewall scripts + the shared ssh-agent bootstrap + the
-# worktree / cross-project clone helpers.
-COPY init-firewall.sh fw-install.sh ssh-agent-init.sh /usr/local/bin/
+# Copy and set up firewall scripts + the shared ssh-agent bootstrap + shared
+# persist runtime dirs + the worktree / cross-project clone helpers.
+COPY init-firewall.sh fw-install.sh ssh-agent-init.sh init-persist-dirs.sh /usr/local/bin/
 COPY wt.sh /usr/local/bin/wt
 COPY refclone.sh /usr/local/bin/refclone
 COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/ssh-agent-init.sh /usr/local/bin/wt /usr/local/bin/refclone && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone && \
   chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
@@ -240,8 +240,8 @@ RUN printf '\n%s\n%s\n' \
       '[ -f /usr/local/bin/ssh-agent-init.sh ] && source /usr/local/bin/ssh-agent-init.sh' \
       >> /home/node/.zshenv && \
     printf '\n%s\n%s\n' \
-      '# Ensure shared persist cache/worktree dirs exist (cargo registry symlink target, etc.)' \
-      'for d in cache/cargo/registry cache/cargo/git cache/pnpm cache/bun cache/sccache worktrees clones; do [ -d "$HOME/persist/$d" ] || mkdir -p "$HOME/persist/$d" 2>/dev/null; done' \
+      '# Ensure shared persist cache/worktree dirs exist for shell-launched tools' \
+      '[ -x /usr/local/bin/init-persist-dirs.sh ] && /usr/local/bin/init-persist-dirs.sh 2>/dev/null || true' \
       >> /home/node/.zshenv && \
     printf '\n%s\n%s\n%s\n' \
       '# Sandbox devcontainer: default the agents to skip-prompt modes' \

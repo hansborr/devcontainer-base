@@ -23,7 +23,9 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 1
 }
 project="$(basename "$repo_root")"
-dest="/home/node/persist/worktrees/${project}/${branch}"
+branch_slug="$(printf '%s' "$branch" | tr -c '[:alnum:]._-' '_' | cut -c1-80)"
+branch_hash="$(printf '%s' "$branch" | sha256sum | cut -c1-8)"
+dest="/home/node/persist/worktrees/${project}/${branch_slug}-${branch_hash}"
 
 if [ -e "$dest" ]; then
   echo "wt: worktree already exists: $dest" >&2
