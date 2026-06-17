@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-/usr/local/bin/init-persist-dirs.sh
+/usr/local/bin/init-persist-dirs.sh || true
 
 # Wait for node_modules (postCreateCommand may still be running on first create)
 MAX_WAIT=120  # 10 minutes (5s × 120)

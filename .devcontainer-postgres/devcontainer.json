@@ -45,6 +45,6 @@
     "5432": { "label": "PostgreSQL" }
   },
   "postCreateCommand": "npm install",
-  "postStartCommand": "/usr/local/bin/init-persist-dirs.sh && sudo /usr/local/bin/init-firewall.sh",
+  "postStartCommand": "/usr/local/bin/init-persist-dirs.sh || true; sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }

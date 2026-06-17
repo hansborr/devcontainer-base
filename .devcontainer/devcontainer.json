@@ -56,5 +56,5 @@
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
   },
-  "postStartCommand": "/usr/local/bin/init-persist-dirs.sh && sudo /usr/local/bin/init-firewall.sh"
+  "postStartCommand": "/usr/local/bin/init-persist-dirs.sh || true; sudo /usr/local/bin/init-firewall.sh"
 }
