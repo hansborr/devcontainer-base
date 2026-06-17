@@ -177,16 +177,39 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
       cargo binstall -y --no-symlinks sccache just cargo-nextest; \
     fi
 ENV RUSTC_WRAPPER=sccache
+ENV SCCACHE_DIR=/home/node/persist/cache/sccache
+ENV BUN_INSTALL_CACHE_DIR=/home/node/persist/cache/bun
+
+# Route per-toolchain caches onto the shared 'persist' volume so they survive
+# rebuilds AND dedupe across projects. Everything is one btrfs filesystem, so
+# node_modules/target reflink (COW) cheaply against these stores regardless of
+# where a worktree lives. pnpm: store on persist + reflink imports. cargo:
+# symlink only the registry/git caches (NOT all of ~/.cargo — its bin/ holds the
+# image-baked sccache/just/nextest). The persist dirs are created at shell start
+# via ~/.zshenv (persist is a runtime volume, absent at build time). A project's
+# own .npmrc/pnpm config still wins over these user-global defaults.
+RUN printf '%s\n%s\n' \
+      'store-dir=/home/node/persist/cache/pnpm' \
+      'package-import-method=clone-or-copy' \
+      >> /home/node/.npmrc
+RUN if [ "$INSTALL_RUST" = "true" ]; then \
+      rm -rf /home/node/.cargo/registry /home/node/.cargo/git && \
+      ln -sfn /home/node/persist/cache/cargo/registry /home/node/.cargo/registry && \
+      ln -sfn /home/node/persist/cache/cargo/git /home/node/.cargo/git; \
+    fi
 
 # User-global rust-analyzer config (memory/CPU caps). Lives in the image layer,
 # so it applies to every Rust project and survives rebuilds.
 COPY --chown=node:node rust-analyzer.toml /home/node/.config/rust-analyzer/rust-analyzer.toml
 
-# Copy and set up firewall scripts + the shared ssh-agent bootstrap
+# Copy and set up firewall scripts + the shared ssh-agent bootstrap + the
+# worktree / cross-project clone helpers.
 COPY init-firewall.sh fw-install.sh ssh-agent-init.sh /usr/local/bin/
+COPY wt.sh /usr/local/bin/wt
+COPY refclone.sh /usr/local/bin/refclone
 COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/ssh-agent-init.sh && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/ssh-agent-init.sh /usr/local/bin/wt /usr/local/bin/refclone && \
   chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
@@ -216,8 +239,17 @@ RUN printf '\n%s\n%s\n' \
       '# Shared ssh-agent (fixed socket) for all shells, incl. Claude Code Bash tool' \
       '[ -f /usr/local/bin/ssh-agent-init.sh ] && source /usr/local/bin/ssh-agent-init.sh' \
       >> /home/node/.zshenv && \
+    printf '\n%s\n%s\n' \
+      '# Ensure shared persist cache/worktree dirs exist (cargo registry symlink target, etc.)' \
+      'for d in cache/cargo/registry cache/cargo/git cache/pnpm cache/bun cache/sccache worktrees clones; do [ -d "$HOME/persist/$d" ] || mkdir -p "$HOME/persist/$d" 2>/dev/null; done' \
+      >> /home/node/.zshenv && \
     printf '\n%s\n%s\n%s\n' \
       '# Sandbox devcontainer: default the agents to skip-prompt modes' \
       "alias claude='claude --dangerously-skip-permissions'" \
       "alias codex='codex --yolo'" \
+      >> /home/node/.zshrc && \
+    printf '\n%s\n%s\n%s\n' \
+      '# Worktree / cross-project clone helpers (cd into the created path)' \
+      'wt() { local d; d="$(command wt "$@")" || return; cd "$d"; }' \
+      'refclone() { local d; d="$(command refclone "$@")" || return; cd "$d"; }' \
       >> /home/node/.zshrc

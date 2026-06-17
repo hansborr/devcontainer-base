@@ -14,6 +14,10 @@ services:
       - npm-cache:/home/node/.npm:U
       - playwright-cache:/home/node/.cache/ms-playwright:U
       - persist:/home/node/persist:U
+      # Read-only view of every host project, for cross-project reference and
+      # `refclone`. Relabeled shared (z); see CLAUDE.md if first-start relabel of
+      # large trees is slow.
+      - ${HOME}/repos:/home/node/repos:ro,z
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro,z
       - /tmp/${PROJECT_NAME:-myproject}:/tmp:z
     ports:
