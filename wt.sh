@@ -43,7 +43,8 @@ fi
 # btrfs; near-zero disk until files diverge). Skips anything already present.
 for d in node_modules target .next dist build .turbo; do
   if [ -e "$repo_root/$d" ] && [ ! -e "$dest/$d" ]; then
-    cp -a --reflink=auto "$repo_root/$d" "$dest/$d" 2>/dev/null || true
+    cp -a --reflink=auto "$repo_root/$d" "$dest/$d" 2>/dev/null \
+      || echo "wt: warning: failed to reflink-copy $d into the worktree" >&2
   fi
 done
 

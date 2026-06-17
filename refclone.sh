@@ -33,7 +33,22 @@ if [ -e "$dest" ]; then
 fi
 
 mkdir -p "$(dirname "$dest")"
-# Reflink the whole tree (instant, COW). -a preserves symlinks/perms; pnpm's
-# store symlinks keep resolving because the store lives on this same volume.
+# Reflink the whole tree (instant, COW). -a preserves symlinks/perms.
 cp -a --reflink=auto "$src_path" "$dest"
+
+# Heads-up for pnpm projects cloned from the read-only host repos mount: their
+# node_modules symlinks point at the *host's* pnpm store path, which doesn't
+# exist in this container, so they dangle in the copy. (Clones of a container
+# project — e.g. /workspace — are fine: those symlinks already target the shared
+# persist store. npm/yarn node_modules are real files and copy fine regardless.)
+case "$src_path" in
+  /home/node/repos/*)
+    if [ -e "$dest/node_modules/.pnpm" ] || [ -e "$dest/pnpm-lock.yaml" ]; then
+      echo "refclone: '$name' looks like a pnpm project cloned from the host repos" >&2
+      echo "          mount; its node_modules symlinks point at the host store and" >&2
+      echo "          won't resolve here. Run 'pnpm install' in $dest to fix them." >&2
+    fi
+    ;;
+esac
+
 echo "$dest"
