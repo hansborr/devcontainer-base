@@ -1,6 +1,6 @@
 FROM node:24
 
-ARG TZ=America/Los_Angeles
+ARG TZ=America/Chicago
 ENV TZ="$TZ"
 
 ENV LANG=en_US.UTF-8 \
