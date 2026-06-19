@@ -48,14 +48,16 @@ disagree, **these files win**; use the handoff for the Dolt/beads concepts and �
    cp ~/repos/devcontainer-base/dolt/dolt.network \
       ~/repos/devcontainer-base/dolt/dolt.volume \
       ~/repos/devcontainer-base/dolt/dolt.container ~/.config/containers/systemd/
-   cp -r ~/repos/devcontainer-base/dolt/servercfg.d ~/.config/containers/systemd/  # if your unit path expects it; here it's mounted from the repo dir
+   # servercfg.d is NOT copied — dolt.container mounts it directly from the repo dir.
    cd ~/repos/devcontainer-base/dolt && cp .env.example .env && $EDITOR .env
    systemctl --user daemon-reload
    systemctl --user start dolt.service
    ```
    Then create the DB + `beads` sync user per handoff §3.4 (connect to :3306 as root from
-   the host — the host is outside the container firewall, so admin works). Don't forget the
-   initial `CALL DOLT_COMMIT('--allow-empty', …)` or the first clone fails.
+   the host via `127.0.0.1` — 3306 is published on loopback only, so admin works from devbox
+   and clients never touch it). The §3.4 grants now include the dynamic `CLONE_ADMIN`
+   privilege that clone/pull need (not covered by `GRANT ALL`). Don't forget the initial
+   `CALL DOLT_COMMIT('--allow-empty', …)` or the first clone fails.
 
 4. **Addressing & transport are decided** (answers handoff open-Qs #2/#3): plain `http`
    over the tailnet, MagicDNS name — matches Forgejo. Client remote URL:
@@ -70,9 +72,10 @@ disagree, **these files win**; use the handoff for the Dolt/beads concepts and �
 
 ## Possible snag
 
-If `dolt.service` fails writing to `/var/lib/dolt` under rootless podman (UID mismatch),
-add `:U` to the data volume mount in `dolt.container`
-(`Volume=dolt-data.volume:/var/lib/dolt:U`) and restart — same fix the Forgejo runner uses.
+The data volume already mounts with `:U` (`Volume=dolt-data.volume:/var/lib/dolt:U`), which
+maps ownership to the container's run-user under rootless podman — the same fix the Forgejo
+runner uses. If `dolt.service` *still* fails writing to `/var/lib/dolt` with a permission
+error, check the image's run-user/entrypoint and inspect `podman logs beads-dolt`.
 
 ## Availability
 

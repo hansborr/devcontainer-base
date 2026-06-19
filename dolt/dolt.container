@@ -1,28 +1,46 @@
 [Unit]
 Description=Dolt SQL server (beads shared remote)
 After=network-online.target
+# Disable start-rate-limiting: at boot the user manager can start this before
+# tailscale0 has the IP, so the 100.65.243.16 bind fails and Restart=always loops
+# until the IP appears. Without this, systemd hits the default 5-in-10s limit and
+# gives up. Paired with RestartSec in [Service].
+StartLimitIntervalSec=0
 
 [Container]
 ContainerName=beads-dolt
-# PIN this before relying on it. Start on a recent tag, run the §5.3/§5.4 push/pull
-# round-trip from an *enforcing* devcontainer, then pin the exact tag here so the
-# storage/protocol format can't drift under the in-process Dolt bundled in `bd`.
-Image=dolthub/dolt-sql-server:latest
+# Fully-qualified registry so rootless podman doesn't hit short-name resolution
+# under systemd (a non-interactive generator can't answer a registry prompt).
+# PIN the tag before relying on it: start on a recent tag, run the §5.3/§5.4
+# push/pull round-trip from an *enforcing* devcontainer, then replace `:latest`
+# with the exact tag so the storage/protocol format can't drift under the
+# in-process Dolt bundled in `bd`.
+Image=docker.io/dolthub/dolt-sql-server:latest
 Network=dolt.network
-# Bind to the tailscale IP only (never 0.0.0.0) — same rule as Forgejo, keeps the
-# server off the home LAN. 50051 is the one beads actually uses; 3306 is admin /
-# optional future server-mode.
+# Never bind 0.0.0.0 — keep the server off the home LAN (same rule as Forgejo).
+# 50051 (remotesapi, the only port beads uses) → the tailscale IP so every
+# container on the tailnet reaches it.
 PublishPort=100.65.243.16:50051:50051
-PublishPort=100.65.243.16:3306:3306
-Volume=dolt-data.volume:/var/lib/dolt
+# 3306 (MySQL admin) → loopback only: reachable from devbox itself for admin/setup,
+# never over the tailnet. Clients use remotesapi (50051) only. If you later enable
+# beads server-mode, move this to the tailscale IP deliberately.
+PublishPort=127.0.0.1:3306:3306
+# :U maps the volume's ownership to the container's run-user under rootless podman
+# (same pattern as the Forgejo runner) so the first write to /var/lib/dolt can't
+# fail on a UID mismatch.
+Volume=dolt-data.volume:/var/lib/dolt:U
 Volume=%h/repos/devcontainer-base/dolt/servercfg.d:/etc/dolt/servercfg.d:ro
 Volume=/etc/localtime:/etc/localtime:ro
 # Admin root password comes from a non-committed env file (see .env.example).
 EnvironmentFile=%h/repos/devcontainer-base/dolt/.env
-Environment=DOLT_ROOT_HOST=%
+# Literal % must be doubled — systemd/Quadlet does specifier expansion on this file
+# (note %h above), so a bare % would be mangled/warned. %% → the MySQL "any host"
+# wildcard, letting root connect for admin/setup.
+Environment=DOLT_ROOT_HOST=%%
 
 [Service]
 Restart=always
+RestartSec=10
 TimeoutStartSec=300
 
 [Install]
