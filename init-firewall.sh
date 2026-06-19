@@ -165,6 +165,26 @@ iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 # Then allow only specific outbound traffic to allowed domains
 iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 
+# Allow the self-hosted devbox services over the tailnet: Forgejo HTTP/SSH git
+# (3000/2222) and the Dolt remotesapi used by beads `bd dolt push/pull` (50051).
+# Port-scoped, and only when the host resolves into the tailnet CGNAT range
+# (100.64.0.0/10), so an empty/hijacked DNS answer can't open a hole to the world.
+# This single block reconciles the Forgejo plan §6.2 and the Dolt handoff — do NOT
+# also add the Forgejo-only block from the plan; the 50051 entry here covers beads.
+DEVBOX_HOST="devbox.tail76c33c.ts.net"
+devbox_ip=$(dig +short A "$DEVBOX_HOST" 2>/dev/null | head -n1 || true)
+if [ -z "$devbox_ip" ]; then
+    devbox_ip="100.65.243.16"   # fallback if MagicDNS isn't resolvable at firewall time
+fi
+if [[ "$devbox_ip" =~ ^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\. ]]; then
+    for port in 3000 2222 50051; do   # Forgejo http, Forgejo ssh, Dolt remotesapi (beads)
+        iptables -A OUTPUT -p tcp -d "$devbox_ip" --dport "$port" -j ACCEPT
+    done
+    echo "Allowed devbox services at $devbox_ip on tcp/{3000,2222,50051}"
+else
+    echo "WARN: $DEVBOX_HOST resolved to '$devbox_ip' (not in 100.64.0.0/10) — skipping devbox allow"
+fi
+
 # Explicitly REJECT all other outbound traffic for immediate feedback
 iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 

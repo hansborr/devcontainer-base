@@ -1,0 +1,14 @@
+# Mounted read-only at /etc/dolt/servercfg.d/config.yaml.
+# The `remotesapi` block is what turns on the native Dolt remote protocol that
+# `bd dolt push` / `bd dolt pull` use — without it you only get MySQL on :3306.
+log_level: info
+
+listener:
+  host: 0.0.0.0          # all interfaces *inside* the container; the host only
+  port: 3306             # publishes these on the tailscale IP (see dolt.container)
+  max_connections: 128
+
+remotesapi:
+  port: 50051
+
+# data dir is provided by the image at /var/lib/dolt (see dolt.volume)

@@ -1,0 +1,29 @@
+[Unit]
+Description=Dolt SQL server (beads shared remote)
+After=network-online.target
+
+[Container]
+ContainerName=beads-dolt
+# PIN this before relying on it. Start on a recent tag, run the §5.3/§5.4 push/pull
+# round-trip from an *enforcing* devcontainer, then pin the exact tag here so the
+# storage/protocol format can't drift under the in-process Dolt bundled in `bd`.
+Image=dolthub/dolt-sql-server:latest
+Network=dolt.network
+# Bind to the tailscale IP only (never 0.0.0.0) — same rule as Forgejo, keeps the
+# server off the home LAN. 50051 is the one beads actually uses; 3306 is admin /
+# optional future server-mode.
+PublishPort=100.65.243.16:50051:50051
+PublishPort=100.65.243.16:3306:3306
+Volume=dolt-data.volume:/var/lib/dolt
+Volume=%h/repos/devcontainer-base/dolt/servercfg.d:/etc/dolt/servercfg.d:ro
+Volume=/etc/localtime:/etc/localtime:ro
+# Admin root password comes from a non-committed env file (see .env.example).
+EnvironmentFile=%h/repos/devcontainer-base/dolt/.env
+Environment=DOLT_ROOT_HOST=%
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
