@@ -169,8 +169,9 @@ iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 # (3000/2222) and the Dolt remotesapi used by beads `bd dolt push/pull` (50051).
 # Port-scoped, and only when the host resolves into the tailnet CGNAT range
 # (100.64.0.0/10), so an empty/hijacked DNS answer can't open a hole to the world.
-# This single block reconciles the Forgejo plan §6.2 and the Dolt handoff — do NOT
-# also add the Forgejo-only block from the plan; the 50051 entry here covers beads.
+# This single block reconciles the Forgejo plan §6.2 and the Dolt deploy guide
+# (dolt/README.md) — do NOT also add the Forgejo-only block from the plan; the 50051
+# entry here covers beads.
 DEVBOX_HOST="devbox.tail76c33c.ts.net"
 devbox_ip=$(dig +short A "$DEVBOX_HOST" 2>/dev/null | head -n1 || true)
 if [ -z "$devbox_ip" ]; then

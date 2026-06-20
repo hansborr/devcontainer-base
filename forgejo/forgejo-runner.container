@@ -1,0 +1,30 @@
+[Unit]
+Description=Forgejo Actions runner (host executor)
+After=forgejo.service
+Requires=forgejo.service
+# Same boot-race guard as forgejo.container/dolt.container: don't let an early flap
+# (e.g. forgejo not yet reachable) burn the default start-rate limit. Paired with
+# RestartSec below.
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=forgejo-runner
+# Built locally from forgejo/runner/Dockerfile (step 3 in the README). Fully-qualified
+# localhost/ name so the systemd generator doesn't hit short-name resolution.
+Image=localhost/forgejo-runner:latest
+Network=forgejo.network
+# :U here (unlike forgejo-data): this is a small volume (registration state + job work
+# dirs) and the runner runs as USER node with no chowning entrypoint, so the volume
+# must be chowned to node's mapped uid for the first write to succeed.
+Volume=forgejo-runner-data.volume:/data:U
+Volume=%h/repos/devcontainer-base/forgejo/runner/config.yml:/data/config.yml:ro
+Volume=/etc/localtime:/etc/localtime:ro
+WorkingDir=/data
+Exec=forgejo-runner daemon --config /data/config.yml
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

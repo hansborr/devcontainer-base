@@ -1,0 +1,68 @@
+[Unit]
+Description=Forgejo git server
+# NB: After=network-online.target is effectively a no-op in a systemd --user manager
+# (the user session doesn't pull that target), so it does NOT actually gate on the IP
+# being up — the retry guard below is what handles the boot race. Don't remove the
+# guard thinking this After= covers it.
+After=network-online.target
+# Disable start-rate-limiting: at boot the user manager can start this before
+# tailscale0 has the IP, so the 100.65.243.16 bind fails and Restart=always loops
+# until the IP appears. Without this, systemd hits the default 5-in-10s limit and
+# gives up. Paired with RestartSec in [Service]. (Same pattern as dolt.container.)
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=forgejo
+# v15 is the current LTS (supported until 2027-07-15). The bare :15 tag tracks the
+# latest patch within the v15 LTS line; there is intentionally no :latest tag.
+# codeberg.org is the canonical registry (data.forgejo.org / code.forgejo.org are
+# mirrors). Fully-qualified so rootless podman under systemd doesn't hit a
+# short-name resolution prompt a non-interactive generator can't answer.
+Image=codeberg.org/forgejo/forgejo:15
+Network=forgejo.network
+# Never bind 0.0.0.0 — keep Forgejo off the home LAN. Both ports → the tailscale IP
+# so every container on the tailnet (both laptops) reaches one canonical URL.
+# 3000 = web + HTTP git; 2222 = SSH git (container :22 → host :2222).
+PublishPort=100.65.243.16:3000:3000
+PublishPort=100.65.243.16:2222:22
+# No :U here (deliberate — see forgejo/README.md "Ownership"): the standard image's
+# root entrypoint chowns /data to USER_UID:USER_GID itself, and :U would recursively
+# re-chown the whole (growing) repo tree on every start. The runner volume, which
+# runs as USER node with no chowning entrypoint, keeps its :U.
+Volume=forgejo-data.volume:/data
+Volume=/etc/localtime:/etc/localtime:ro
+# The image's entrypoint runs as root, creates the git user as 1000:1000, and chowns
+# /data to it. This is what makes the no-:U choice above correct.
+Environment=USER_UID=1000
+Environment=USER_GID=1000
+# DOMAIN/ROOT_URL/SSH_DOMAIN are the one canonical MagicDNS name, identical from every
+# container on both laptops (hairpin verified).
+Environment=FORGEJO__server__DOMAIN=devbox.tail76c33c.ts.net
+Environment=FORGEJO__server__ROOT_URL=http://devbox.tail76c33c.ts.net:3000/
+Environment=FORGEJO__server__SSH_DOMAIN=devbox.tail76c33c.ts.net
+# SSH_PORT is cosmetic — the port advertised in clone URLs, so it must equal the
+# host-published port (2222). SSH_LISTEN_PORT is the real bind inside the container
+# (22, the container side of the 2222:22 publish).
+Environment=FORGEJO__server__SSH_PORT=2222
+Environment=FORGEJO__server__SSH_LISTEN_PORT=22
+# Built-in Go SSH server — no real sshd in the container.
+Environment=FORGEJO__server__START_SSH_SERVER=true
+Environment=FORGEJO__server__HTTP_PORT=3000
+Environment=FORGEJO__database__DB_TYPE=sqlite3
+# Pin the sqlite filename explicitly so it's deterministic (the image default has
+# drifted between gitea.db/forgejo.db); makes the backup path unambiguous.
+Environment=FORGEJO__database__PATH=/data/gitea/forgejo.db
+# Lock the instance down after the first admin user is created (step 2).
+Environment=FORGEJO__service__DISABLE_REGISTRATION=true
+Environment=FORGEJO__actions__ENABLED=true
+# Resolve unqualified `uses: actions/checkout@v4` against the official Forgejo actions
+# registry (data.forgejo.org). Do NOT use code.forgejo.org here (action-resolution bugs).
+Environment=FORGEJO__actions__DEFAULT_ACTIONS_URL=https://data.forgejo.org
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

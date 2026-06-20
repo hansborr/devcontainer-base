@@ -1,0 +1,8 @@
+[Unit]
+Description=Forgejo nightly dump + offsite copy to aura-farming
+After=forgejo.service
+Wants=forgejo.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/repos/devcontainer-base/forgejo/forgejo-backup.sh

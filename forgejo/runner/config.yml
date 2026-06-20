@@ -1,0 +1,22 @@
+# Forgejo Actions runner config (host executor). Mounted read-only into the runner.
+#
+# Secret-free by design: the registration secret lives in /data/.runner on the
+# forgejo-runner-data volume (written by the one-time `forgejo-runner register`, see
+# README "Runner"), so this file is safe to commit. The future-proof alternative —
+# declaring the connection inline under `server.connections` with a UUID+token from
+# the Forgejo UI — puts a secret in this file and must be gitignored; see the README.
+log:
+  level: info
+runner:
+  # Path to the registration file written by `register` (run with -w /data).
+  file: /data/.runner
+  capacity: 1
+  timeout: 30m
+  # Must stay identical to the labels passed to `register --labels`, or jobs with
+  # `runs-on: devcontainer` won't be picked up. The `:host` type selects the host
+  # executor (run steps in a shell in this container, no per-job isolation).
+  labels:
+    - devcontainer:host
+host:
+  # Parent dir for each job's working tree (created under the :U-owned /data volume).
+  workdir_parent: /data/work

@@ -1,84 +1,366 @@
-# Dolt shared remote on devbox (beads store)
+# Dolt shared remote on devbox (beads issue store)
 
-This directory is the **devbox-specific** realization of `../dolt-remote-server-handoff.md`
-(the generic handoff, co-located at this repo's root).
-That handoff was written for a context-free agent and assumes Docker + `docker compose`.
-devbox is **rootless podman + Quadlet + systemd --user (linger), no host sudo** — the same
-environment as the Forgejo plan. These files override the handoff accordingly. Where they
-disagree, **these files win**; use the handoff for the Dolt/beads concepts and §4–§6
-(security, verification, gotchas).
+A long-lived **Dolt SQL server** on the `devbox` host that acts as the shared **beads
+(`bd`) issue store** for the fleet of devcontainers. Each container keeps its own local,
+embedded beads database and syncs to this central server with `bd dolt push` / `bd dolt
+pull`. This directory holds everything needed to deploy it; the unit files next to this
+README are paste-ready.
 
-## What's here
+> **Status:** not yet deployed. The Quadlet units and config here are ready to install.
+
+---
+
+## 1. What this is (the concepts)
+
+If "beads" and "Dolt" mean nothing to you, read this; otherwise skip to [§4](#4-deploy-on-devbox).
+
+- **beads (`bd`)** is a CLI issue tracker for AI agents. It stores its issues in a
+  **Dolt** database rather than flat files.
+- **Dolt** is a version-controlled SQL database — "Git for data". It has its own commits,
+  branches, and **remotes**, entirely separate from Git. A Dolt *remote* is a place you
+  `push`/`pull` Dolt history to/from, exactly like a Git remote.
+- Each beads client keeps a **local, in-process (embedded) Dolt database** and
+  synchronizes with a shared remote over Dolt's native **remotesapi** protocol.
+- This server is that shared remote.
+
+**Why self-hosted.** The client fleet is many ephemeral containers, across multiple
+machines, each using Git worktrees. The beads DB is per-worktree and containers are
+ephemeral, so the shared source of truth must live *outside* any single container — and we
+want one issue graph reachable by all of them. A self-hosted Dolt server speaking the
+native remotesapi protocol gives that. (Rejected alternatives: committing issue data into
+the product git repo ties issues to branches and causes per-branch churn/merge conflicts;
+using GitHub as a Dolt remote over `git+ssh` mixes binary Dolt data into the product repo
+and is slower than the native protocol.)
+
+---
+
+## 2. Architecture
+
+```
+                      devbox host
+        ┌───────────────────────────────────────┐
+        │  beads-dolt  (Quadlet, systemd --user) │
+        │   • :50051  remotesapi (push/pull)     │ → tailscale IP, tailnet-reachable
+        │   • :3306   MySQL protocol (admin)     │ → 127.0.0.1 only
+        │   • volume  /var/lib/dolt              │
+        │   • database: musi                     │
+        └──────────────▲────────────────────────┘
+                        │  http://devbox.tail76c33c.ts.net:50051/musi
+       ┌────────────────┼─────────────────┬───────────────┐
+       │                │                 │               │
+ ┌─────┴─────┐    ┌─────┴─────┐     ┌─────┴─────┐   ┌─────┴─────┐
+ │ container │    │ container │     │ container │   │  (other   │
+ │  worktreeA│    │  worktreeB│     │  on host2 │   │  machines)│
+ │  local DB │    │  local DB │     │  local DB │   │           │
+ └───────────┘    └───────────┘     └───────────┘   └───────────┘
+   each runs `bd dolt pull` at session start, `bd dolt push` at session close
+```
+
+**Two ports, two purposes:**
+
+- **`:50051` — remotesapi.** The native Dolt remote protocol that `bd dolt push/pull`
+  uses. **This is the one that matters.** Published on the **tailscale IP**
+  (`100.65.243.16`) so every container on the tailnet reaches it.
+- **`:3306` — MySQL protocol.** Used here only for **admin/setup** (creating the database
+  and sync user). Published on **loopback only** (`127.0.0.1`), so it's reachable from
+  devbox itself but never over the tailnet.
+
+**Usage mode: push/pull only.** Clients keep a local DB and sync via remotesapi. This is
+offline-friendly and has no single point of failure during work (eventually consistent at
+sync points). A live "server mode" where clients connect their beads directly to `:3306`
+for real-time shared state is *possible* but not enabled — if it's ever needed, move the
+`:3306` publish to the tailscale IP deliberately; no other server-side change is required.
+
+**Decided parameters** (don't re-litigate these):
+
+| | |
+|---|---|
+| Database name | `musi` |
+| Transport | plain `http` over the Tailscale tailnet (already WireGuard-encrypted); no TLS |
+| Host address | MagicDNS name `devbox.tail76c33c.ts.net` (one URL works from every container on every machine) |
+| devbox tailscale IP | `100.65.243.16` (the units bind this directly) |
+| Client remote URL | `http://devbox.tail76c33c.ts.net:50051/musi` |
+| Sync user | `beads` |
+
+These mirror the Forgejo deployment's choices.
+
+---
+
+## 3. What's in this directory
 
 | File | Role |
 |---|---|
-| `dolt.container` | Quadlet unit for `dolthub/dolt-sql-server`, bound to the tailscale IP. Replaces the handoff's docker-compose so it **boot-starts via `[Install]` + linger** like Forgejo (a bare compose would not survive a reboot). |
-| `dolt.volume` / `dolt.network` | Quadlet volume + network, parallel to the Forgejo units. |
-| `servercfg.d/config.yaml` | Enables the `remotesapi` (:50051) port — the part beads actually uses. |
-| `.env.example` | Copy to `.env` (gitignored) with the root password. |
+| `dolt.container` | Quadlet unit for `dolthub/dolt-sql-server`. Publishes `:50051` on the tailscale IP and `:3306` on loopback; boot-starts via `[Install]` + linger. |
+| `dolt.volume` | Quadlet volume `dolt-data` → `/var/lib/dolt` (the database; the source of truth). |
+| `dolt.network` | Quadlet network `dolt`. |
+| `servercfg.d/config.yaml` | Server config; the `remotesapi` block is what turns on `:50051`. Mounted read-only into the container straight from this dir. |
+| `.env.example` | Copy to `.env` (gitignored) and set the root password. |
 
-## Reconciliation notes (the 5 things the handoff doesn't know about devbox)
+The environment is **rootless podman + Quadlet + systemd `--user` (linger), no host
+sudo** — the same as the Forgejo deployment. The `[Install]` + linger setup is what makes
+the service survive a host reboot (a bare `podman run` or compose would not).
 
-1. **Firewall — already handled, in ONE place.** The dev containers run a default-DROP
-   iptables firewall; beads sync on **50051** would be dropped from any *enforcing*
-   container. The base `init-firewall.sh` now allows `3000/2222/50051` to the devbox
-   tailscale IP in a single block. **Do not** also add the Forgejo-plan §6.2 block — this
-   supersedes it. Live insert for an already-running enforcing container (e.g. ma-toki),
-   zero restart:
-   ```bash
-   for p in 3000 2222 50051; do
-     podman exec -u root ma-toki iptables -I OUTPUT 1 -p tcp -d 100.65.243.16 --dport "$p" -j ACCEPT
-   done
-   ```
-   musi needs nothing (its firewall is intentionally policy-ACCEPT). The baked rule lands
-   for everyone at the next base rebuild (`./build.sh` → projects re-pull base).
+---
 
-2. **Verify from an ENFORCING devcontainer, not a throwaway.** Handoff §5.3 clones with a
-   bare `dolthub/dolt:latest` container that has **no** firewall, so it passes even when
-   real clients are blocked. After standing the server up, do the real test from inside
-   ma-toki:
-   ```bash
-   # inside the ma-toki devcontainer, after the firewall change:
-   DOLT_REMOTE_USER=beads DOLT_REMOTE_PASSWORD=<sync-pw> \
-     bd dolt pull   # (or a dolt clone of http://devbox.tail76c33c.ts.net:50051/musi)
-   ```
+## 4. Deploy on devbox
 
-3. **No Docker / no host sudo.** Translate handoff `docker …` → `podman …`. Install:
-   ```bash
-   cp ~/repos/devcontainer-base/dolt/dolt.network \
-      ~/repos/devcontainer-base/dolt/dolt.volume \
-      ~/repos/devcontainer-base/dolt/dolt.container ~/.config/containers/systemd/
-   # servercfg.d is NOT copied — dolt.container mounts it directly from the repo dir.
-   cd ~/repos/devcontainer-base/dolt && cp .env.example .env && $EDITOR .env
-   systemctl --user daemon-reload
-   systemctl --user start dolt.service
-   ```
-   Then create the DB + `beads` sync user per handoff §3.4 (connect to :3306 as root from
-   the host via `127.0.0.1` — 3306 is published on loopback only, so admin works from devbox
-   and clients never touch it). The §3.4 grants now include the dynamic `CLONE_ADMIN`
-   privilege that clone/pull need (not covered by `GRANT ALL`). Don't forget the initial
-   `CALL DOLT_COMMIT('--allow-empty', …)` or the first clone fails.
+### 4.1 Prerequisites
 
-4. **Addressing & transport are decided** (answers handoff open-Qs #2/#3): plain `http`
-   over the tailnet, MagicDNS name — matches Forgejo. Client remote URL:
-   ```
-   http://devbox.tail76c33c.ts.net:50051/musi
-   ```
+- Rootless podman with the systemd `--user` generator (Quadlet), and **linger enabled** for
+  the user (`loginctl enable-linger $USER`) so units start at boot without a login session.
+- Network reachability decided — already done (tailnet + MagicDNS, see [§2](#2-architecture)).
 
-5. **Pin the image + back it up.** Start on `:latest`, run the round-trip in (2), then pin
-   the exact tag in `dolt.container`. The `forgejo dump` backup does **not** cover Dolt —
-   add the `dolt-data` volume (or a `dolt dump`) to the same nightly rsync-to-aura-farming
-   routine if you want the issue graph backed up too.
+### 4.2 Install the Quadlet units
 
-## Possible snag
+```bash
+# Copy the three unit files into the user's Quadlet dir. servercfg.d is NOT copied —
+# dolt.container mounts it read-only straight from this repo dir.
+cp ~/repos/devcontainer-base/dolt/dolt.network \
+   ~/repos/devcontainer-base/dolt/dolt.volume \
+   ~/repos/devcontainer-base/dolt/dolt.container ~/.config/containers/systemd/
 
-The data volume already mounts with `:U` (`Volume=dolt-data.volume:/var/lib/dolt:U`), which
-maps ownership to the container's run-user under rootless podman — the same fix the Forgejo
-runner uses. If `dolt.service` *still* fails writing to `/var/lib/dolt` with a permission
-error, check the image's run-user/entrypoint and inspect `podman logs beads-dolt`.
+# Create the env file with the root password BEFORE starting (see warning below).
+cd ~/repos/devcontainer-base/dolt && cp .env.example .env && $EDITOR .env
 
-## Availability
+systemctl --user daemon-reload
+systemctl --user start dolt.service
+```
 
-Both Forgejo and Dolt now live on devbox, so when devbox sleeps, aura-farming loses both.
-Unlike Forgejo, beads push/pull is offline-tolerant: clients keep a local DB and just defer
-sync until devbox is back — so this degrades gracefully.
+> ⚠️ **Create `.env` before `start`.** `dolt.container` has `EnvironmentFile=…/.env` with
+> no `-` prefix, so the file is **required**. Starting the unit without it fails with an
+> opaque `EnvironmentFile … No such file` error rather than a clear "set the password"
+> message.
+
+Watch it come up:
+
+```bash
+systemctl --user status dolt.service
+podman logs beads-dolt | grep -iE 'remotesapi|listening|3306|50051'
+```
+
+### 4.3 Create the database + sync user
+
+`:3306` is published on loopback only, so do admin from **devbox itself** via `127.0.0.1`.
+Connect as `root` (password = `DOLT_ROOT_PASSWORD` from `.env`):
+
+```bash
+# from devbox, if a mysql/mariadb client is installed:
+mysql -h 127.0.0.1 -P 3306 -u root -p
+
+# or a throwaway client container sharing the server's network namespace:
+podman run --rm -it --network container:beads-dolt docker.io/library/mysql:8 \
+  mysql -h 127.0.0.1 -P 3306 -u root -p
+```
+
+Then run:
+
+```sql
+-- the shared issues database
+CREATE DATABASE IF NOT EXISTS musi;
+
+-- a dedicated, non-root user the clients authenticate as
+CREATE USER IF NOT EXISTS 'beads'@'%' IDENTIFIED BY '<long-random-sync-password>';
+
+-- Dolt push over remotesapi requires broad privileges on the target DB.
+GRANT ALL PRIVILEGES ON musi.* TO 'beads'@'%' WITH GRANT OPTION;
+
+-- Clone/fetch/pull over remotesapi additionally need the *dynamic* CLONE_ADMIN
+-- privilege, which is NOT included in GRANT ALL PRIVILEGES (dynamic privileges must be
+-- granted by name). Without it the first `bd dolt pull` / clone fails before any chunk
+-- transfer is even reached.
+GRANT CLONE_ADMIN ON *.* TO 'beads'@'%';
+FLUSH PRIVILEGES;
+
+-- Make an initial empty Dolt commit so a fresh clone succeeds during verification
+-- (a brand-new DB with zero commits cannot be cloned).
+USE musi;
+CALL DOLT_COMMIT('--allow-empty', '-m', 'init shared beads remote');
+```
+
+> If a later `bd dolt push` is rejected on privileges, widen the DB grant to
+> `GRANT ALL PRIVILEGES ON *.* TO 'beads'@'%' WITH GRANT OPTION;` — Dolt's push path
+> effectively wants a super-user. Start scoped, widen only if needed. Even `ALL PRIVILEGES
+> ON *.*` does **not** include the dynamic `CLONE_ADMIN` granted above — keep that explicit
+> grant no matter how wide you go.
+
+Deliver the sync password to clients **out-of-band**, never in a committed file.
+
+### 4.4 Firewall
+
+The dev containers run a **default-DROP egress firewall**, so `:50051` would be dropped
+from any *enforcing* container. This is **already handled** in the base
+`init-firewall.sh`: a single unified block allows tcp `3000`/`2222` (Forgejo) + `50051`
+(Dolt remotesapi) to the devbox tailscale IP, gated on the host resolving into the
+`100.64.0.0/10` tailnet range. **Do not add a second per-service rule** — extend that
+existing block if anything ever changes.
+
+The baked rule lands for every container at the next base rebuild (`./build.sh` → projects
+re-pull the base). To open an **already-running** enforcing container immediately, with
+zero restart:
+
+```bash
+for p in 3000 2222 50051; do
+  podman exec -u root ma-toki iptables -I OUTPUT 1 -p tcp -d 100.65.243.16 --dport "$p" -j ACCEPT
+done
+```
+
+(`musi` needs nothing — its firewall is intentionally policy-ACCEPT. A live rule like the
+above is wiped if the container restarts before the baked script is updated.)
+
+---
+
+## 5. Verify (from an *enforcing* devcontainer)
+
+This is the real test — it exercises auth, network reachability, **and** the chunk transfer
+that local tests miss.
+
+**Verify from inside an enforcing devcontainer (e.g. `ma-toki`), not a throwaway `dolt`
+container.** A bare `dolthub/dolt:latest` container has no firewall, so it would pass even
+when real clients are blocked — a false positive. After the firewall is open ([§4.4](#44-firewall)):
+
+```bash
+# inside the ma-toki devcontainer:
+DOLT_REMOTE_USER=beads DOLT_REMOTE_PASSWORD='<sync-pw>' \
+  dolt clone --user beads http://devbox.tail76c33c.ts.net:50051/musi /tmp/musi-test \
+  && echo "CLONE OK"
+```
+
+Use the **exact MagicDNS host** clients use, not `localhost`. If clone metadata succeeds
+but data transfer hangs, that's the host-reachability gotcha in
+[§8](#8-operational-notes--gotchas).
+
+**Write round-trip (ideal):** in the clone, make a commit and `dolt push`, then re-clone
+elsewhere and confirm it's there.
+
+Once the round-trip passes, **pin the image tag** in `dolt.container` (replace `:latest`
+with the exact tag) so the storage/protocol format can't drift under the in-process Dolt
+bundled in `bd`. See [§8](#8-operational-notes--gotchas) on version compatibility.
+
+---
+
+## 6. Security
+
+- **Strong, unique passwords** for both `root` and the `beads` sync user; keep them in
+  `.env` / a secret store, never in committed files.
+- **Network isolation is the primary access control.** `:50051` is on the tailnet only and
+  `:3306` is loopback only. Treat tailnet reachability as the access boundary. Plain
+  `http://` is acceptable **only** because the tailnet is already WireGuard-encrypted; if
+  traffic ever has to cross anything untrusted, front remotesapi with a TLS reverse proxy
+  (clients then use `https://…`) or configure Dolt's TLS options.
+- **Least privilege:** the `beads` user has rights on the `musi` DB only (plus the dynamic
+  `CLONE_ADMIN`); widen to `*.*` only if push truly requires it. Never hand clients the
+  `root` password.
+- **Never bind `0.0.0.0`.** The units bind the tailscale IP / loopback explicitly to keep
+  the server off the home LAN (same rule as Forgejo).
+
+---
+
+## 7. Backups — REQUIRED follow-up
+
+⚠️ **Nothing backs up the Dolt data by default, and the Forgejo nightly job does NOT cover
+it.** The beads issue graph is the whole point of this service, and the `dolt-data` volume
+is the **only** copy of its history. Until a backup is wired up, a lost volume means a lost
+issue graph. This is a follow-up to implement, not optional hygiene.
+
+Wire the Dolt data into the same nightly off-node routine as Forgejo
+(`../forgejo/forgejo-backup.sh` is the pattern to mirror — dump → off-node `rsync` to
+aura-farming). Pick one:
+
+- **Logical (preferred):** `podman exec beads-dolt dolt backup …` / `CALL DOLT_BACKUP(...)`,
+  or `dolt dump`, then rsync the artifact off-node. Survives storage-format quirks better
+  than a raw volume copy.
+- **Volume snapshot:** rsync the `dolt-data` volume mountpoint (stop the server or snapshot
+  first for a consistent copy).
+
+Dolt keeps full history, so the volume grows over time — monitor it.
+
+---
+
+## 8. Operational notes & gotchas
+
+- **Privileges: push is broad, read needs `CLONE_ADMIN`.** Dolt's remotesapi push wants a
+  super-user-ish grant; clone/fetch/pull need the dynamic `CLONE_ADMIN` privilege, which
+  `GRANT ALL PRIVILEGES` does **not** cover. Both are granted in [§4.3](#43-create-the-database--sync-user).
+- **Empty DB can't be cloned.** Always make the initial `DOLT_COMMIT('--allow-empty')`
+  ([§4.3](#43-create-the-database--sync-user)) or the first clone fails with "remote has no branches".
+- **Host reachability / advertised host.** Verify from a *remote* client using the real
+  MagicDNS name, not localhost. Don't hand out an address that only works from inside the
+  server.
+- **Dolt version compatibility.** The clients embed Dolt *in-process* inside the `bd`
+  binary; there is no separate client `dolt` binary whose version you can read, so treat the
+  **push/pull round-trip test ([§5](#5-verify-from-an-enforcing-devcontainer)) as the source of truth.** Start on a recent
+  `dolthub/dolt-sql-server` tag; if you hit a protocol/storage-format mismatch, pin the
+  image to a version near the client's bundled Dolt and re-test. Once it works, **pin the
+  tag** (don't float `:latest`) so it doesn't drift.
+- **Volume ownership.** `dolt.container` mounts the data volume with `:U`
+  (`Volume=dolt-data.volume:/var/lib/dolt:U`), which maps ownership to the container's
+  run-user under rootless podman so the first write to `/var/lib/dolt` can't fail on a UID
+  mismatch. If `dolt.service` *still* fails with a permission error writing there, check the
+  image's run-user/entrypoint and inspect `podman logs beads-dolt`.
+- **Boot race (handled in the unit).** Under a systemd `--user` manager, `After=network-online.target`
+  is effectively a no-op (the user session doesn't pull that target), so at boot the manager
+  can start `dolt.service` before `tailscale0` has its IP and the `100.65.243.16` bind
+  fails. `dolt.container` handles this with `StartLimitIntervalSec=0` + `Restart=always` /
+  `RestartSec=10`, which retries until the IP appears instead of hitting the default
+  5-in-10s start limit and giving up. Don't remove those thinking `After=` covers it.
+- **Restarts survive reboots.** `Restart=always` + `[Install] WantedBy=default.target` +
+  linger keep it alive across reboots; confirm it comes back and clients reconnect after a
+  host reboot.
+- **Availability.** Both Forgejo and Dolt live on devbox, so when devbox sleeps,
+  aura-farming loses both. Unlike Forgejo, beads push/pull is **offline-tolerant**: clients
+  keep a local DB and just defer sync until devbox is back, so this degrades gracefully.
+
+---
+
+## 9. Client setup (the `musi` side) — the contract
+
+You don't run these on the server; they're here so you know what the connection values are
+for and can sanity-check them. The first client seeds the remote, the rest pull.
+
+```bash
+# point the beads remote at the native server (replacing any temporary git remote)
+bd dolt remote remove origin   # if a placeholder remote exists
+bd dolt remote add origin http://devbox.tail76c33c.ts.net:50051/musi
+
+# credentials (per container; from env / secret store)
+export DOLT_REMOTE_USER=beads
+export DOLT_REMOTE_PASSWORD='<sync-password>'
+
+# first client seeds the remote, others pull
+bd dolt push                 # initial population
+bd dolt pull && bd bootstrap # on a fresh container/worktree
+```
+
+Sync is then automated: `bd dolt pull` at session start, `bd dolt push` at session close.
+
+---
+
+## 10. Connection details to hand back
+
+Once verified, the connection block (deliver the password out-of-band, not in the repo):
+
+```
+BEADS DOLT REMOTE — connection details
+  scheme:          http        (tailnet is WireGuard-encrypted; no TLS)
+  host:            devbox.tail76c33c.ts.net
+  remotesapi port: 50051
+  sql port:        3306        (loopback-only, admin)
+  database:        musi
+  sync user:       beads
+  sync password:   <delivered out-of-band>
+  remote URL:      http://devbox.tail76c33c.ts.net:50051/musi
+  verified:        yes/no      (round-trip from an enforcing container succeeded?)
+  image tag:       docker.io/dolthub/dolt-sql-server:<pinned-tag>
+```
+
+---
+
+## References
+
+- Dolt — Using Remotes: <https://www.dolthub.com/docs/sql-reference/version-control/remotes>
+- Dolt SQL Server Push Support (self-hosted remotesapi, auth):
+  <https://www.dolthub.com/blog/2023-12-29-sql-server-push-support/>
+- `dolthub/dolt-sql-server` Docker image: <https://hub.docker.com/r/dolthub/dolt-sql-server>
+- Beads: <https://github.com/gastownhall/beads>
+</content>
+</invoke>

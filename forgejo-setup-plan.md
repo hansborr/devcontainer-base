@@ -1,7 +1,11 @@
-# Forgejo + local CI/CD setup plan (rev 5)
+# Forgejo + local CI/CD setup plan (rev 6)
 
-> Status: **PROPOSAL — not yet implemented.** Rev 3 sequences the rollout to be **non-disruptive** to the
-> currently-running devcontainers (verified on-host). Rev 2 incorporated an external AI review.
+> Status: **READY TO IMPLEMENT — not yet deployed.** Rev 6 **materializes** this plan into paste-ready
+> files under [`forgejo/`](forgejo/) (Quadlet units, runner image, backup job, deploy guide), with the
+> rev-5 review items C1–C7 resolved. The §6.1 snippets below are now *design reference only* — the
+> canonical, paste-ready source is the `forgejo/` directory; `forgejo/README.md` is the deploy guide.
+> Rev 3 sequenced the rollout to be **non-disruptive** to the running devcontainers (verified on-host);
+> rev 2 incorporated an external AI review.
 > Author context: Claude Code, working in `~/repos/devcontainer-base` on host `devbox`.
 > Date: 2026-06-19.
 
@@ -40,20 +44,20 @@ Verified on-host with musi/ma-toki running (read-only probes):
 
 ### Changelog rev 3 → rev 4 (Dolt remote reconciliation)
 
-Reconciled with the Beads/Dolt shared-remote handoff (`dolt-remote-server-handoff.md`, now
-co-located in this repo) so the two plans don't collide on the container firewall:
+Reconciled with the Beads/Dolt shared-remote plan (`dolt/README.md`) so the two plans
+don't collide on the container firewall:
 
 | # | Finding | Resolution in rev 4 |
 |---|---|---|
 | F1 | The Dolt beads remote needs **tcp 50051** reachable from the dev containers, but this plan's §6.2 block opened only 3000/2222 → `bd dolt push/pull` would be silently dropped from *enforcing* containers. | §6.2 firewall block **unified**: one allow-block for **3000/2222/50051** to the devbox tailscale IP, implemented + committed in `init-firewall.sh`. Do not add a separate Dolt rule. |
-| F2 | Two services on devbox; firewall verification could false-pass from a no-firewall throwaway container. | Verify beads sync from an **enforcing** devcontainer (ma-toki), not a throwaway `dolt` container. See `dolt/README.md` §1–§2. |
-| F3 | The Dolt handoff assumed Docker/compose; devbox is rootless podman + Quadlet, no host sudo. | Dolt ships as Quadlet units in `dolt/` (boot-start via linger, like Forgejo), not compose. |
+| F2 | Two services on devbox; firewall verification could false-pass from a no-firewall throwaway container. | Verify beads sync from an **enforcing** devcontainer (ma-toki), not a throwaway `dolt` container. See `dolt/README.md` (Firewall + Verify). |
+| F3 | The Dolt remote was originally specced for Docker/compose; devbox is rootless podman + Quadlet, no host sudo. | Dolt ships as Quadlet units in `dolt/` (boot-start via linger, like Forgejo), not compose. |
 
 ### Changelog rev 4 → rev 5 (Codex design review)
 
 A second-opinion review (OpenAI Codex, `gpt-5.5`, xhigh) cross-checked both plans and the
-committed Dolt files against current upstream docs. The **Dolt** fixes were applied to `dolt/`
-and the handoff; the **Forgejo** items below are captured here for implementation time (Forgejo
+committed Dolt files against current upstream docs. The **Dolt** fixes were applied to
+`dolt/`; the **Forgejo** items below are captured here for implementation time (Forgejo
 is still unbuilt — none of these block the Dolt deploy):
 
 | # | Finding | Action at implementation |
@@ -70,6 +74,27 @@ is still unbuilt — none of these block the Dolt deploy):
 > review: remotesapi listens on the same IP as the SQL server and only needs the `port` field,
 > which `dolt/servercfg.d/config.yaml` already sets. Still verify it end-to-end with a real
 > clone+push round-trip from an *enforcing* container at deploy.
+
+### Changelog rev 5 → rev 6 (materialized into `forgejo/`)
+
+The plan was materialized into a paste-ready [`forgejo/`](forgejo/) directory (parallel to `dolt/`),
+and each rev-5 review item was resolved in the real files. Version-dependent facts were re-verified
+against current upstream docs (Forgejo v15 LTS, runner v12) in June 2026; the tailscale IP was
+re-confirmed on-host (`100.65.243.16`).
+
+| # | rev-5 item | Resolution in rev 6 (canonical file) |
+|---|---|---|
+| C1 | Runner register/config schema may be stale. | **Verified.** Forgejo 15 deprecated `register`/`create-runner-file` in favor of config-declared `server.connections`, but `register` still works and `.runner` is supported going forward. `forgejo/runner/config.yml` ships the **secret-free `register` + `.runner` flow** (default; keeps secrets off the repo-mounted config), with the **config-declared flow documented as the future-proof alternative** in `forgejo/README.md`. Added `runner.file: /data/.runner`; confirmed flags (`--instance`/`--token`/`--labels`) and label syntax (`devcontainer:host`). |
+| C2 | Runner inherits no egress firewall. | **Accepted + documented** in `forgejo/README.md` (Firewall): CI jobs get broader outbound than the dev containers; mitigated by never mounting `persist`/SSH/personal material into the runner. |
+| C3 | Boot-race (tailscale IP not up at unit start). | **Fixed:** `StartLimitIntervalSec=0` + `RestartSec=10` added to **both** `forgejo.container` and `forgejo-runner.container` (matches `dolt.container`). |
+| C4 | `:U` on runner data but not `forgejo-data`. | **Resolved deliberately:** `forgejo-data` omits `:U` (the image's root entrypoint chowns `/data` via `USER_UID`/`USER_GID`; `:U` would recursively re-chown the growing repo tree every start). `:U` kept on the small runner volume (runs as `USER node`, no chowning entrypoint). Rationale in `forgejo/README.md` (Ownership). |
+| C5 | Trailing inline comments would corrupt pasted unit files. | **N/A now** — the real files in `forgejo/` use only full-line comments; nothing is pasted from the snippets below. |
+| C6 | Live-insert hardcodes `100.65.243.16`. | **Re-confirmed** on-host at materialization time (`tailscale ip -4` + MagicDNS both → `100.65.243.16`). Unchanged. |
+| C7 | Title said rev 3 while content was rev 4/5. | Title now rev 6, content matches. |
+| — | Image/binary versions. | Confirmed: `codeberg.org/forgejo/forgejo:15` (LTS to 2027-07-15), `data.forgejo.org/forgejo/runner:12`, binary `/bin/forgejo-runner`. Set `FORGEJO__database__PATH=/data/gitea/forgejo.db` so the sqlite filename is deterministic. |
+
+> The §6.1/§6.2/§7 snippets below are retained as design reference; **the canonical source is the
+> `forgejo/` directory** — see `forgejo/README.md` for the deploy sequence and the resolved details.
 
 ## 1. Goal
 
@@ -181,6 +206,12 @@ New dir `~/repos/devcontainer-base/forgejo/`; Quadlet files copied to `~/.config
 
 ### 6.1 Quadlet + image files
 
+> **MATERIALIZED (rev 6).** These now exist as real, paste-ready files in [`forgejo/`](forgejo/) with
+> the C1–C7 fixes applied (notably: `:U` removed from `forgejo-data`, `StartLimitIntervalSec=0`/`RestartSec=10`
+> on both units, `FORGEJO__database__PATH` pinned, full-line comments only, runner config with
+> `runner.file`). **The snippets below are illustrative design reference only** — do not paste them
+> literally; copy from `forgejo/` and follow `forgejo/README.md`.
+
 **`forgejo/forgejo.network`**
 ```ini
 [Network]
@@ -283,7 +314,7 @@ WantedBy=default.target
 > devbox tailscale IP as a single block. Do **not** apply a separate Forgejo-only or Dolt-only
 > rule — it would duplicate the committed block. The snippet below is kept (updated to the
 > unified form) for context only. Canonical source: `init-firewall.sh`; the beads/Dolt rationale
-> is in `dolt/README.md` §1.
+> is in `dolt/README.md` (Firewall).
 
 **Only the base-image `init-firewall.sh` matters at runtime** (see changelog R1; the `musi`/`ma-toki`
 `.devcontainer/init-firewall.sh` copies are vestigial and not used). So there is exactly **one file to edit** and
@@ -316,7 +347,7 @@ Return traffic is covered by the existing ESTABLISHED ACCEPT rules.
 - **Phase 5a — live, now, zero restart.** For each *enforcing* container, insert the same rule live (no host sudo,
   no restart; uses root-in-container via rootless `podman exec -u root`). Insert at the top so it precedes the REJECT:
   ```bash
-  for p in 3000 2222 50051; do   # 50051 = Dolt remotesapi (beads); see dolt/README.md §1
+  for p in 3000 2222 50051; do   # 50051 = Dolt remotesapi (beads); see dolt/README.md (Firewall)
     podman exec -u root ma-toki iptables -I OUTPUT 1 -p tcp -d 100.65.243.16 --dport "$p" -j ACCEPT
   done
   ```
@@ -329,6 +360,10 @@ Return traffic is covered by the existing ESTABLISHED ACCEPT rules.
   When musi's firewall is eventually re-enabled/rebuilt, it inherits the baked rule automatically.
 
 ## 7. Implementation sequence (no host sudo, non-disruptive)
+
+> **Canonical, copy-pasteable version of this sequence lives in [`forgejo/README.md`](forgejo/README.md)**
+> (Install sequence), with the exact `cp`/`podman build`/`register` commands against the materialized
+> files. The outline below is retained for the disruption rationale.
 
 Steps 1–4 create only new isolated rootless containers/services and **do not restart or rebuild musi/ma-toki**.
 Step 5 is split (5a live / 5b deferred) so nothing forces a disruptive `devcontainer-rebuild.sh`.

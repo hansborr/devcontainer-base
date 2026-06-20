@@ -1,5 +1,9 @@
 [Unit]
 Description=Dolt SQL server (beads shared remote)
+# NB: After=network-online.target is effectively a no-op in a systemd --user manager
+# (the user session doesn't pull that target), so it does NOT actually gate on the IP
+# being up — the retry guard below is what handles the boot race. Don't remove the
+# guard thinking this After= covers it.
 After=network-online.target
 # Disable start-rate-limiting: at boot the user manager can start this before
 # tailscale0 has the IP, so the 100.65.243.16 bind fails and Restart=always loops

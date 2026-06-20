@@ -96,9 +96,17 @@ To make your SSH key available in containers, run `./seed-ssh-key.sh` once on th
 
 Claude/Codex state and the shared scratch live in Podman named volumes, not on the host filesystem. To move them: on the old machine `./migrate-volumes.sh backup ~/dc-backup`, copy `~/dc-backup` over, then on the new machine `./migrate-volumes.sh restore ~/dc-backup` **before** `./build.sh` and rebuilding each project. Volume names (including compose-namespaced ones like `musi_claude-config`) are preserved, so they line up as long as each project's `.env` `PROJECT_NAME` matches. The backup contains auth tokens and your encrypted SSH key — keep it private.
 
+### Self-hosted tailnet services (Forgejo + Dolt)
+
+Two self-hosted services run on the `devbox` host as **rootless podman + Quadlet units (systemd `--user`, linger)** — separate from the devcontainers, reachable by them over the Tailscale tailnet. They are **not yet deployed**; the directories are paste-ready realizations of their design docs.
+
+- **`forgejo/`** — self-hosted Forgejo git server + local CI runner + nightly off-node backup. Forgejo is origin with a one-way push mirror to GitHub. Design/rationale + rev changelog in `forgejo-setup-plan.md`; deploy guide in `forgejo/README.md`. (`forgejo/` may be untracked — commit it before relying on it.)
+- **`dolt/`** — a Dolt SQL server used as the shared **beads** (`bd`) issue store, synced via the remotesapi port. Self-contained design + deploy guide in `dolt/README.md`.
+- **Firewall tie-in:** the dev containers reach these over the tailnet, so `init-firewall.sh` carries a **single unified allow-block** for tcp `3000`/`2222` (Forgejo http/ssh) + `50051` (Dolt remotesapi) to the devbox tailscale IP, gated on the host resolving into the `100.64.0.0/10` range. Don't add a second per-service rule — extend the existing block. The CI **runner** container has no egress firewall (it's a plain Quadlet container, not a devcontainer).
+
 ## Firewall domain management
 
-To allow a new domain, add it to `REQUIRED_DOMAINS` or `OPTIONAL_DOMAINS` in `init-firewall.sh`, then rebuild the base image. `REQUIRED_DOMAINS` failures abort container startup; `OPTIONAL_DOMAINS` failures only log warnings.
+To allow a new domain, add it to `REQUIRED_DOMAINS` or `OPTIONAL_DOMAINS` in `init-firewall.sh`, then rebuild the base image. `REQUIRED_DOMAINS` failures abort container startup; `OPTIONAL_DOMAINS` failures only log warnings. (The unified devbox tailnet allow-block for Forgejo/Dolt is separate — see [Self-hosted tailnet services](#self-hosted-tailnet-services-forgejo--dolt).)
 
 To temporarily install apt packages without permanently modifying the base image:
 ```bash
