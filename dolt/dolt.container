@@ -15,7 +15,7 @@ StartLimitIntervalSec=0
 ContainerName=beads-dolt
 # Fully-qualified registry so rootless podman doesn't hit short-name resolution
 # under systemd (a non-interactive generator can't answer a registry prompt).
-# PIN the tag before relying on it: start on a recent tag, run the §5.3/§5.4
+# PIN the tag before relying on it: start on a recent tag, run the §5
 # push/pull round-trip from an *enforcing* devcontainer, then replace `:latest`
 # with the exact tag so the storage/protocol format can't drift under the
 # in-process Dolt bundled in `bd`.

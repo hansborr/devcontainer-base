@@ -4,8 +4,9 @@
 log_level: info
 
 listener:
-  host: 0.0.0.0          # all interfaces *inside* the container; the host only
-  port: 3306             # publishes these on the tailscale IP (see dolt.container)
+  host: 0.0.0.0          # bind all interfaces *inside* the container; the host
+  port: 3306             # decides exposure — dolt.container publishes 3306 on
+                         # loopback only, 50051 (remotesapi) on the tailscale IP.
   max_connections: 128
 
 remotesapi:

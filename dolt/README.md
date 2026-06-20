@@ -170,12 +170,18 @@ GRANT ALL PRIVILEGES ON musi.* TO 'beads'@'%' WITH GRANT OPTION;
 -- transfer is even reached.
 GRANT CLONE_ADMIN ON *.* TO 'beads'@'%';
 FLUSH PRIVILEGES;
-
--- Make an initial empty Dolt commit so a fresh clone succeeds during verification
--- (a brand-new DB with zero commits cannot be cloned).
-USE musi;
-CALL DOLT_COMMIT('--allow-empty', '-m', 'init shared beads remote');
 ```
+
+> **Stop here — do not create a Dolt commit on the server.** A fresh Dolt database shares
+> the deterministic "Initialize data repository" root commit, so a client whose history
+> descends from that same root fast-forwards cleanly on its first push. Adding a
+> server-side `DOLT_COMMIT` (even `--allow-empty`) puts a commit on the remote that no
+> client has, turning the first `bd dolt push` into a divergent (non-fast-forward)
+> rejection. The remote's real history is seeded **once, by the first client** — see
+> [§5](#5-verify-from-an-enforcing-devcontainer) (which both seeds and verifies) and §9.
+> The push/pull round-trip in §5 is the source of truth for whether this works on your
+> Dolt version; if that first push is *still* rejected as divergent, seed with a one-time
+> `bd dolt push --force` (or clone-first), then never force again.
 
 > If a later `bd dolt push` is rejected on privileges, widen the DB grant to
 > `GRANT ALL PRIVILEGES ON *.* TO 'beads'@'%' WITH GRANT OPTION;` — Dolt's push path
@@ -204,33 +210,41 @@ for p in 3000 2222 50051; do
 done
 ```
 
-(`musi` needs nothing — its firewall is intentionally policy-ACCEPT. A live rule like the
-above is wiped if the container restarts before the baked script is updated.)
+(A non-enforcing container — one whose firewall is intentionally policy-ACCEPT — needs
+nothing. A live rule like the above is wiped if the container restarts before the baked
+script is updated.)
 
 ---
 
 ## 5. Verify (from an *enforcing* devcontainer)
 
-This is the real test — it exercises auth, network reachability, **and** the chunk transfer
-that local tests miss.
+This both **seeds** the remote (its first real history) and **verifies** it — exercising
+auth, network reachability, the push grants, **and** the chunk transfer that local tests
+miss. A clone alone is **not** sufficient: it only proves `CLONE_ADMIN` + reachability, not
+the broad push path `bd dolt push` actually uses. Do the full round-trip, in order.
 
-**Verify from inside an enforcing devcontainer (e.g. `ma-toki`), not a throwaway `dolt`
+**Run from inside enforcing devcontainers (e.g. `ma-toki`), not a throwaway `dolt`
 container.** A bare `dolthub/dolt:latest` container has no firewall, so it would pass even
 when real clients are blocked — a false positive. After the firewall is open ([§4.4](#44-firewall)):
 
 ```bash
-# inside the ma-toki devcontainer:
-DOLT_REMOTE_USER=beads DOLT_REMOTE_PASSWORD='<sync-pw>' \
-  dolt clone --user beads http://devbox.tail76c33c.ts.net:50051/musi /tmp/musi-test \
-  && echo "CLONE OK"
+# 1) SEED + push test — from the first enforcing container, as the real client.
+#    This establishes the remote's history (see the §4.3 note on why the server
+#    must NOT pre-create a commit).
+export DOLT_REMOTE_USER=beads DOLT_REMOTE_PASSWORD='<sync-pw>'
+bd dolt remote add origin http://devbox.tail76c33c.ts.net:50051/musi
+bd dolt push && echo "PUSH OK"
+
+# 2) Re-clone test — from a *second* enforcing container, raw dolt so it exercises
+#    chunk transfer independently of beads. Use the exact MagicDNS host, not localhost.
+export DOLT_REMOTE_USER=beads DOLT_REMOTE_PASSWORD='<sync-pw>'
+dolt clone --user beads http://devbox.tail76c33c.ts.net:50051/musi /tmp/musi-test \
+  && echo "CLONE OK" && ls /tmp/musi-test   # confirm the pushed data is present
 ```
 
-Use the **exact MagicDNS host** clients use, not `localhost`. If clone metadata succeeds
-but data transfer hangs, that's the host-reachability gotcha in
-[§8](#8-operational-notes--gotchas).
-
-**Write round-trip (ideal):** in the clone, make a commit and `dolt push`, then re-clone
-elsewhere and confirm it's there.
+If clone metadata succeeds but data transfer hangs, that's the host-reachability gotcha in
+[§8](#8-operational-notes--gotchas). If the push is rejected as divergent, see the §4.3
+note (one-time `bd dolt push --force`, then never force again).
 
 Once the round-trip passes, **pin the image tag** in `dolt.container` (replace `:latest`
 with the exact tag) so the storage/protocol format can't drift under the in-process Dolt
@@ -281,8 +295,11 @@ Dolt keeps full history, so the volume grows over time — monitor it.
 - **Privileges: push is broad, read needs `CLONE_ADMIN`.** Dolt's remotesapi push wants a
   super-user-ish grant; clone/fetch/pull need the dynamic `CLONE_ADMIN` privilege, which
   `GRANT ALL PRIVILEGES` does **not** cover. Both are granted in [§4.3](#43-create-the-database--sync-user).
-- **Empty DB can't be cloned.** Always make the initial `DOLT_COMMIT('--allow-empty')`
-  ([§4.3](#43-create-the-database--sync-user)) or the first clone fails with "remote has no branches".
+- **Seed via the first client push, not a server commit.** The first `bd dolt push` seeds
+  the remote's history ([§5](#5-verify-from-an-enforcing-devcontainer)). Do *not* pre-commit
+  on the server — that creates a divergent root the first push can't fast-forward onto
+  ([§4.3](#43-create-the-database--sync-user)). A clone attempted *before* anything is pushed
+  fails with "remote has no branches" — expected; seed first.
 - **Host reachability / advertised host.** Verify from a *remote* client using the real
   MagicDNS name, not localhost. Don't hand out an address that only works from inside the
   server.
@@ -315,7 +332,9 @@ Dolt keeps full history, so the volume grows over time — monitor it.
 ## 9. Client setup (the `musi` side) — the contract
 
 You don't run these on the server; they're here so you know what the connection values are
-for and can sanity-check them. The first client seeds the remote, the rest pull.
+for and can sanity-check them. The first client seeds the remote, the rest pull — that
+initial seed is the same `bd dolt push` exercised in [§5](#5-verify-from-an-enforcing-devcontainer);
+if it's rejected as divergent, see the §4.3 note (one-time `--force`).
 
 ```bash
 # point the beads remote at the native server (replacing any temporary git remote)
