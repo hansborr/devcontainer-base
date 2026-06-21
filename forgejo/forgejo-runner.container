@@ -17,7 +17,11 @@ Network=forgejo.network
 # dirs) and the runner runs as USER node with no chowning entrypoint, so the volume
 # must be chowned to node's mapped uid for the first write to succeed.
 Volume=forgejo-runner-data.volume:/data:U
-Volume=%h/repos/devcontainer-base/forgejo/runner/config.yml:/data/config.yml:ro
+# ,z (shared SELinux relabel) is required on this enforcing-SELinux host so the
+# container (container_t) can read the repo-mounted config; without it the runner dies
+# with "open /data/config.yml: permission denied" (the file is labeled user_home_t).
+# Lowercase z (shared), not Z (private) — same pattern + rationale as dolt.container.
+Volume=%h/repos/devcontainer-base/forgejo/runner/config.yml:/data/config.yml:ro,z
 Volume=/etc/localtime:/etc/localtime:ro
 WorkingDir=/data
 Exec=forgejo-runner daemon --config /data/config.yml

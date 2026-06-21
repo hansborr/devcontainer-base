@@ -98,9 +98,9 @@ Claude/Codex state and the shared scratch live in Podman named volumes, not on t
 
 ### Self-hosted tailnet services (Forgejo + Dolt)
 
-Two self-hosted services run on the `devbox` host as **rootless podman + Quadlet units (systemd `--user`, linger)** — separate from the devcontainers, reachable by them over the Tailscale tailnet. They are **not yet deployed**; the directories are paste-ready realizations of their design docs.
+Two self-hosted services run on the `devbox` host as **rootless podman + Quadlet units (systemd `--user`, linger)** — separate from the devcontainers, reachable by them over the Tailscale tailnet. Both are now **deployed** on devbox (Forgejo as of 2026-06-20; Dolt running); the directories are the deployed source of truth, so edits there must be re-applied to `~/.config/containers/systemd/` and the service restarted.
 
-- **`forgejo/`** — self-hosted Forgejo git server + local CI runner + nightly off-node backup. Forgejo is origin with a one-way push mirror to GitHub. Design/rationale + rev changelog in `forgejo-setup-plan.md`; deploy guide in `forgejo/README.md`. (`forgejo/` may be untracked — commit it before relying on it.)
+- **`forgejo/`** — self-hosted Forgejo git server + local CI runner + nightly off-node backup. Forgejo is origin with a one-way push mirror to GitHub. **Deployed 2026-06-20** (Forgejo 15.0.3, runner v12.12.0); see the `forgejo/README.md` status block for the deploy-time fixes (rootless SSH on container port 2222 not 22, `INSTALL_LOCK=true` for config-driven admin creation, SELinux `,z` on the runner config mount). Design/rationale + rev changelog in `forgejo-setup-plan.md`; deploy guide in `forgejo/README.md`.
 - **`dolt/`** — a Dolt SQL server used as the shared **beads** (`bd`) issue store, synced via the remotesapi port. Self-contained design + deploy guide in `dolt/README.md`.
 - **Firewall tie-in:** the dev containers reach these over the tailnet, so `init-firewall.sh` carries a **single unified allow-block** for tcp `3000`/`2222` (Forgejo http/ssh) + `50051` (Dolt remotesapi) to the devbox tailscale IP, gated on the host resolving into the `100.64.0.0/10` range. Don't add a second per-service rule — extend the existing block. The CI **runner** container has no egress firewall (it's a plain Quadlet container, not a devcontainer).
 

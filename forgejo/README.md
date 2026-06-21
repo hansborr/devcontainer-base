@@ -8,9 +8,22 @@ systemd `--user` (linger), no host sudo**. Where the plan's inline snippets and 
 disagree, **these files win** (they have the rev-5/rev-6 review fixes baked in; the plan's snippets
 were illustrative and carried trailing comments that would corrupt a literal paste).
 
-> Status: **not yet deployed.** Everything here is ready to run; nothing has been started. Steps 1–4
-> create only *new* isolated rootless containers and do **not** restart or rebuild the running
-> musi/ma-toki devcontainers. See `../forgejo-setup-plan.md` §7 for the non-disruptive sequencing.
+> Status: **DEPLOYED on devbox 2026-06-20** (Forgejo 15.0.3, runner v12.12.0). Forgejo + runner are
+> running and boot-enabled; the nightly dump timer is enabled. The musi/ma-toki devcontainers were
+> **not** restarted or rebuilt. Two follow-ups remain (both user-side): the host→aura-farming SSH key
+> for the offsite backup copy, and per-repo onboarding + the GitHub push-mirror. See
+> `../forgejo-setup-plan.md` §7 for the non-disruptive sequencing.
+>
+> **Deploy-time fixes (applied to the units here — the plan snippets predate them):**
+> 1. **SSH port** — rootless podman can't bind container `:22` as the unprivileged git user
+>    (`bind: permission denied`), so the built-in Go SSH server listens on **2222 inside** the
+>    container and we publish `2222:2222` straight through (`SSH_LISTEN_PORT=2222`). The external
+>    clone port is still **2222** — unchanged.
+> 2. **`INSTALL_LOCK=true`** — added `FORGEJO__security__INSTALL_LOCK=true` so the instance is fully
+>    config-driven (no web-installer round-trip); Forgejo auto-generates `SECRET_KEY`/`INTERNAL_TOKEN`
+>    on first start. The admin user is created via `forgejo admin user create` (step 2 below), not the UI.
+> 3. **SELinux `,z`** on the runner's `config.yml` bind-mount — required on this enforcing-SELinux
+>    host (`user_home_t` → `container_file_t`), same fix + rationale as `dolt.container`.
 
 ## What's here
 
@@ -51,9 +64,20 @@ systemctl --user daemon-reload          # generates units + boot-enables via [In
 systemctl --user start forgejo.service
 ```
 
-2. Browse `http://devbox.tail76c33c.ts.net:3000`, create the admin user, add your SSH pubkey, confirm
-   registration is now disabled. In the UI, create a runner registration token
-   (*Site Administration → Actions → Runners → Create registration token*) for step 3.
+2. **Admin user (CLI, config-driven).** With `INSTALL_LOCK=true` (see Deploy-time fixes) there is no
+   web installer — create the admin out-of-band and generate the runner token via CLI:
+   ```bash
+   # strong password (guaranteed upper/lower/digit); report it, change it in the UI after.
+   PW="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-20)Aa9"; echo "admin pw: $PW"
+   podman exec -u 1000 forgejo forgejo admin user create --admin \
+     --username <you> --email <you@example.com> --password "$PW" --must-change-password=false
+   # add your SSH pubkey (host key shown) so host-side `git push` over :2222 works:
+   curl -fsS -u "<you>:$PW" -X POST http://devbox.tail76c33c.ts.net:3000/api/v1/user/keys \
+     -H 'Content-Type: application/json' \
+     -d "{\"title\":\"devbox-host\",\"key\":\"$(cat ~/.ssh/id_ed25519.pub)\"}"
+   # runner registration token for step 3 (or use the UI: Site Admin → Actions → Runners):
+   podman exec -u 1000 forgejo forgejo actions generate-runner-token
+   ```
 
 3. **Runner** — build the image, register once, then start the unit:
    ```bash
