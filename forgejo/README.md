@@ -155,6 +155,28 @@ file to `config.yml.example`, gitignore the real `config.yml`, and keep the secr
 flow works; pick one. Labels must be identical wherever they appear or `runs-on: devcontainer` jobs
 won't be picked up.
 
+## Updating
+
+`forgejo-update.sh` scripts the manual update steps with a pre-update **volume snapshot**, a
+**health gate**, and printed **rollback** steps. Run it on the devbox host (not in a devcontainer):
+
+```bash
+./forgejo/forgejo-update.sh --check     # report what would update; never restarts
+./forgejo/forgejo-update.sh             # update server, then runner (default)
+./forgejo/forgejo-update.sh server      # only the Forgejo server (pull :15 + restart if changed)
+./forgejo/forgejo-update.sh runner      # only the CI runner (rebuild from base + restart)
+```
+
+- **Server** tracks the moving `:15` LTS tag, so an update is `podman pull` + (only if the digest
+  actually changed) a restart. Before restarting it **stops the service, snapshots the `forgejo-data`
+  volume** (consistent sqlite + repos + config — works even at zero repos, no aura-farming SSH needed),
+  then starts onto the new image and polls `/api/v1/version`. Snapshots go to `~/service-backups/forgejo`
+  (override `SNAPSHOT_DIR`/`KEEP`); `--no-backup` skips the stop+snapshot (quick restart only).
+- **Runner** is rebuilt `FROM localhost/claude-devcontainer:latest` — run `./build.sh` first if you want
+  it on a fresh dev base. Registration survives (it lives on the volume, not the image).
+- On a failed health check the script prints exact rollback commands (re-tag the prior image, re-import
+  the snapshot). The previous image stays in the local store for rollback.
+
 ## Backups
 
 `forgejo-backup.sh` runs `forgejo dump` inside the container (captures issues/PRs/settings/attachments/

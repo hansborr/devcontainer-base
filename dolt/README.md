@@ -6,7 +6,11 @@ embedded beads database and syncs to this central server with `bd dolt push` / `
 pull`. This directory holds everything needed to deploy it; the unit files next to this
 README are paste-ready.
 
-> **Status:** not yet deployed. The Quadlet units and config here are ready to install.
+> **Status:** **deployed on devbox 2026-06-20**, image pinned to `dolthub/dolt-sql-server:2.1.8`.
+> Server + auth + grants + clone/push round-trip verified from the host (see [§5](#5-verify-from-an-enforcing-devcontainer));
+> end-to-end verification from inside a *running enforcing* container was deferred (the
+> firewall rule is already baked into `init-firewall.sh`, so it lands on the next container
+> rebuild). `musi` is created and left pristine, awaiting the first real `bd` client seed.
 
 ---
 
@@ -94,6 +98,7 @@ These mirror the Forgejo deployment's choices.
 | `dolt.volume` | Quadlet volume `dolt-data` → `/var/lib/dolt` (the database; the source of truth). |
 | `dolt.network` | Quadlet network `dolt`. |
 | `servercfg.d/config.yaml` | Server config; the `remotesapi` block is what turns on `:50051`. Mounted read-only into the container straight from this dir. |
+| `dolt-update.sh` | Version-bump the pinned image with a pre-update volume snapshot + health gate (see [§8 Updating](#updating)). |
 | `.env.example` | Copy to `.env` (gitignored) and set the root password. |
 
 The environment is **rootless podman + Quadlet + systemd `--user` (linger), no host
@@ -161,8 +166,11 @@ CREATE DATABASE IF NOT EXISTS musi;
 -- a dedicated, non-root user the clients authenticate as
 CREATE USER IF NOT EXISTS 'beads'@'%' IDENTIFIED BY '<long-random-sync-password>';
 
--- Dolt push over remotesapi requires broad privileges on the target DB.
-GRANT ALL PRIVILEGES ON musi.* TO 'beads'@'%' WITH GRANT OPTION;
+-- Dolt push over remotesapi requires SUPER-USER-level privileges. CONFIRMED on Dolt
+-- 2.1.8: a DB-scoped grant (ON musi.*) is NOT enough — push fails with
+-- "API Authorization Failure: beads has not been granted SuperUser access". The global
+-- grant below is therefore required, not optional, on this version.
+GRANT ALL PRIVILEGES ON *.* TO 'beads'@'%' WITH GRANT OPTION;
 
 -- Clone/fetch/pull over remotesapi additionally need the *dynamic* CLONE_ADMIN
 -- privilege, which is NOT included in GRANT ALL PRIVILEGES (dynamic privileges must be
@@ -180,14 +188,17 @@ FLUSH PRIVILEGES;
 > rejection. The remote's real history is seeded **once, by the first client** — see
 > [§5](#5-verify-from-an-enforcing-devcontainer) (which both seeds and verifies) and §9.
 > The push/pull round-trip in §5 is the source of truth for whether this works on your
-> Dolt version; if that first push is *still* rejected as divergent, seed with a one-time
-> `bd dolt push --force` (or clone-first), then never force again.
+> Dolt version. **CONFIRMED on Dolt 2.1.8: the first push IS rejected as divergent**
+> (`unknown push error; no common ancestor`) because `CREATE DATABASE musi` already seeds a
+> `main` branch whose init commit doesn't match a fresh client's. So the first real seed
+> needs a one-time `bd dolt push --force` (or clone-first), then never force again.
 
-> If a later `bd dolt push` is rejected on privileges, widen the DB grant to
-> `GRANT ALL PRIVILEGES ON *.* TO 'beads'@'%' WITH GRANT OPTION;` — Dolt's push path
-> effectively wants a super-user. Start scoped, widen only if needed. Even `ALL PRIVILEGES
-> ON *.*` does **not** include the dynamic `CLONE_ADMIN` granted above — keep that explicit
-> grant no matter how wide you go.
+> The `*.*` grant above is the confirmed-required level for push on Dolt 2.1.8 (a scoped
+> `musi.*` grant is rejected — see the comment in the SQL). Note that even `ALL PRIVILEGES
+> ON *.*` does **not** include the dynamic `CLONE_ADMIN` granted separately above — keep
+> that explicit grant no matter how wide you go. (The blast radius of `*.*` is bounded by
+> network isolation: this server is dedicated to the beads store and is tailnet-only /
+> loopback-admin — see [§6](#6-security).)
 
 Deliver the sync password to clients **out-of-band**, never in a committed file.
 
@@ -291,6 +302,23 @@ Dolt keeps full history, so the volume grows over time — monitor it.
 ---
 
 ## 8. Operational notes & gotchas
+
+### Updating
+
+`dolt.container` **pins an exact image tag** (unlike Forgejo's moving `:15`), so an update is a
+deliberate version bump. `dolt-update.sh` scripts it with a pre-update snapshot + health gate:
+
+```bash
+./dolt/dolt-update.sh --check       # show pinned vs running version, then exit
+./dolt/dolt-update.sh 2.2.5         # pin :2.2.5: pull, stop+snapshot, rewrite tag, restart, verify
+```
+
+It pulls the target tag (failing early if it doesn't exist), **stops the service and snapshots the
+`dolt` volume** to `~/service-backups/dolt` (consistent — Dolt's chunk store can be mid-write;
+override `SNAPSHOT_DIR`/`KEEP`, or `--no-backup` to skip), rewrites the `Image=` tag in
+`dolt.container`, re-applies the unit to `~/.config`, restarts, and health-checks (container running
++ SQL `:3306` and remotesapi `:50051` accepting connections). **The tag rewrite is a real source
+change — commit `dolt.container` afterward.** A failed health check prints exact rollback commands.
 
 - **Privileges: push is broad, read needs `CLONE_ADMIN`.** Dolt's remotesapi push wants a
   super-user-ish grant; clone/fetch/pull need the dynamic `CLONE_ADMIN` privilege, which

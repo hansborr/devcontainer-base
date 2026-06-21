@@ -15,11 +15,11 @@ StartLimitIntervalSec=0
 ContainerName=beads-dolt
 # Fully-qualified registry so rootless podman doesn't hit short-name resolution
 # under systemd (a non-interactive generator can't answer a registry prompt).
-# PIN the tag before relying on it: start on a recent tag, run the §5
-# push/pull round-trip from an *enforcing* devcontainer, then replace `:latest`
-# with the exact tag so the storage/protocol format can't drift under the
-# in-process Dolt bundled in `bd`.
-Image=docker.io/dolthub/dolt-sql-server:latest
+# PINNED to 2.1.8 (verified 2026-06-20 via the §5 round-trip; this tag resolves to
+# digest sha256:8dcc15c418eac4ffa7fcdf212c104cd949704bac72b639633bb94e31e83e9e7e)
+# so the storage/protocol format can't drift under the in-process Dolt bundled in
+# `bd`. Re-run the §5 round-trip before bumping this.
+Image=docker.io/dolthub/dolt-sql-server:2.1.8
 Network=dolt.network
 # Never bind 0.0.0.0 — keep the server off the home LAN (same rule as Forgejo).
 # 50051 (remotesapi, the only port beads uses) → the tailscale IP so every
@@ -32,8 +32,13 @@ PublishPort=127.0.0.1:3306:3306
 # :U maps the volume's ownership to the container's run-user under rootless podman
 # (same pattern as the Forgejo runner) so the first write to /var/lib/dolt can't
 # fail on a UID mismatch.
-Volume=dolt-data.volume:/var/lib/dolt:U
-Volume=%h/repos/devcontainer-base/dolt/servercfg.d:/etc/dolt/servercfg.d:ro
+Volume=dolt.volume:/var/lib/dolt:U
+# :z (shared SELinux relabel) is required on this enforcing-SELinux host so the
+# container can read the config; without it the entrypoint dies with
+# "find: '/etc/dolt/servercfg.d': Permission denied". Lowercase z (shared), not Z
+# (private), because ~/repos is also mounted read-only into the devcontainers and a
+# private relabel would break their access.
+Volume=%h/repos/devcontainer-base/dolt/servercfg.d:/etc/dolt/servercfg.d:ro,z
 Volume=/etc/localtime:/etc/localtime:ro
 # Admin root password comes from a non-committed env file (see .env.example).
 EnvironmentFile=%h/repos/devcontainer-base/dolt/.env
