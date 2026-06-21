@@ -179,6 +179,12 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
 ENV RUSTC_WRAPPER=sccache
 ENV SCCACHE_DIR=/home/node/persist/cache/sccache
 ENV BUN_INSTALL_CACHE_DIR=/home/node/persist/cache/bun
+# The bun installer only appends its bin dir to ~/.bashrc/~/.zshrc, which
+# non-interactive shells never source (devcontainer postCreate/postStart hooks,
+# Claude Code's Bash tool). Bake it onto the image PATH so `bun`/`bunx` resolve
+# everywhere, mirroring how codex's ~/.local/bin is handled above. Placed after
+# the Rust/cargo layers to keep their (expensive, network-bound) cache intact.
+ENV PATH=$PATH:/home/node/.bun/bin
 
 # Route per-toolchain caches onto the shared 'persist' volume so they survive
 # rebuilds AND dedupe across projects. Everything is one btrfs filesystem, so
