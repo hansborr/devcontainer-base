@@ -66,7 +66,7 @@ Changes propagate in order: `init-firewall.sh` or `Dockerfile` → `./build.sh` 
 
 ### Container lifecycle
 
-The container runs as user `node` (non-root). The firewall and `fw-install` scripts are the only commands granted passwordless sudo (via `/etc/sudoers.d/node-firewall`).
+The container runs as user `node` (non-root). The `init-firewall.sh`, `fw-install`, and `fw` scripts are the only commands granted passwordless sudo (via `/etc/sudoers.d/node-firewall`).
 
 **Minimal template:** `postStartCommand` runs the firewall on every start. No other lifecycle hooks.
 
@@ -113,4 +113,12 @@ To temporarily install apt packages without permanently modifying the base image
 ```bash
 sudo fw-install poppler-utils    # from inside the container
 ```
-This opens the firewall, runs `apt-get install`, then restores the firewall. Packages installed this way do not persist across container rebuilds.
+This opens the firewall, runs `apt-get install`, then restores the firewall via an `EXIT` trap — so the firewall is re-secured **even if the install fails** (and `fw-install` exits with apt's status). Packages installed this way do not persist across container rebuilds.
+
+To open the firewall and **leave it open** (e.g. to let agents do web research), use the `fw` toggle instead of `fw-install`:
+```bash
+sudo fw off       # open egress (inbound stays locked)
+sudo fw status    # ON (allowlist) | OFF (open)
+sudo fw on        # re-apply the full allowlist firewall (re-runs init-firewall.sh)
+```
+`fw off` is session-scoped: `postStartCommand` re-applies the full firewall on every container start, so a forgotten `off` self-heals on the next restart.

@@ -211,13 +211,14 @@ COPY --chown=node:node rust-analyzer.toml /home/node/.config/rust-analyzer/rust-
 # Copy and set up firewall scripts + the shared ssh-agent bootstrap + shared
 # persist runtime dirs + the worktree / cross-project clone helpers.
 COPY init-firewall.sh fw-install.sh ssh-agent-init.sh init-persist-dirs.sh /usr/local/bin/
+COPY fw.sh /usr/local/bin/fw
 COPY wt.sh /usr/local/bin/wt
 COPY refclone.sh /usr/local/bin/refclone
 COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/fw /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone && \
   chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh" > /etc/sudoers.d/node-firewall && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh, /usr/local/bin/fw" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 # Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
 RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4

@@ -109,6 +109,17 @@ Plus: DNS (UDP 53), SSH (TCP 22), localhost, and the host network.
 
 To add a domain, edit the `REQUIRED_DOMAINS` or `OPTIONAL_DOMAINS` arrays in `init-firewall.sh` and rebuild the base image.
 
+**Toggling the firewall** (from inside a container):
+
+```bash
+sudo fw off       # open egress (e.g. to let agents do web research)
+sudo fw status    # show whether egress is restricted or open
+sudo fw on        # re-apply the full allowlist firewall
+sudo fw-install poppler-utils   # one-shot apt install, then auto re-secure
+```
+
+`fw off` only lasts the current session — the full firewall is re-applied on every container start. `fw-install` always re-secures afterwards, even if the install fails.
+
 ## Customizing the project Dockerfile
 
 The template Dockerfile is just:
@@ -133,6 +144,8 @@ USER node
 ```
 Dockerfile                  Base image definition
 init-firewall.sh            Firewall allowlist (baked into base)
+fw.sh                       Firewall on/off/status toggle -> /usr/local/bin/fw
+fw-install.sh               One-shot apt install with auto re-secure (baked into base)
 build.sh                    Builds the base image
 devcontainer-rebuild.sh     Teardown + rebuild helper for projects
 seed-ssh-key.sh             Copy ~/.ssh into the shared 'persist' volume (run once)
