@@ -17,7 +17,6 @@
     "source=codex-config,target=/home/node/.codex,type=volume,U=true",
     "source=shell-history,target=/commandhistory,type=volume,U=true",
     "source=npm-cache,target=/home/node/.npm,type=volume,U=true",
-    "source=playwright-cache,target=/home/node/.cache/ms-playwright,type=volume,U=true",
     "source=persist,target=/home/node/persist,type=volume,U=true",
     "source=${localEnv:HOME}/repos,target=/home/node/repos,type=bind,readonly,relabel=shared",
     "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly,relabel=shared"

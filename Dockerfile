@@ -232,7 +232,13 @@ RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 # prefix above ::/0 makes getaddrinfo return 127.0.0.1 ahead of ::1.
 RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 
-# Install Playwright system dependencies and browser binaries
+# Install Playwright system dependencies and browser binaries.
+# Browsers land in the default ~/.cache/ms-playwright and live in the IMAGE LAYER
+# on purpose (same anti-shadowing logic as Codex's .codex-dist above): do NOT mount
+# a volume over ~/.cache/ms-playwright. A volume there would shadow this baked
+# Chromium and pin a stale build across base rebuilds — and the image layer is
+# already shared across every project FROM this base (better dedup than a
+# per-project volume). Refreshed whenever the base image is rebuilt.
 RUN npx -y playwright install-deps && npx -y playwright install chromium && npm install -g @playwright/cli@latest
 
 USER node

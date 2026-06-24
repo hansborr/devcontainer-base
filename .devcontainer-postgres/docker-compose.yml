@@ -12,7 +12,6 @@ services:
       - codex-config:/home/node/.codex:U
       - shell-history:/commandhistory:U
       - npm-cache:/home/node/.npm:U
-      - playwright-cache:/home/node/.cache/ms-playwright:U
       - persist:/home/node/persist:U
       # Read-only view of every host project, for cross-project reference and
       # `refclone`. Relabeled shared (z); see CLAUDE.md if first-start relabel of
@@ -20,9 +19,11 @@ services:
       - ${HOME}/repos:/home/node/repos:ro,z
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro,z
       - /tmp/${PROJECT_NAME:-myproject}:/tmp:z
+    # Bind to loopback only: these are reachable from this host (and over the
+    # VS Code / devcontainer port-forward) but never published to the LAN.
     ports:
-      - "3000:3000"   # App server — adjust to match your project
-      - "5173:5173"   # Vite dev server
+      - "127.0.0.1:3000:3000"   # App server — adjust to match your project
+      - "127.0.0.1:5173:5173"   # Vite dev server
     init: true
     userns_mode: "keep-id"
     cap_add:
@@ -42,8 +43,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    # Loopback only — the app reaches Postgres over the compose network, so the
+    # host publish exists just for local tooling. Never expose the DB to the LAN
+    # (the default password in .env.example is intentionally weak).
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -58,7 +62,6 @@ volumes:
   codex-config:
   shell-history:
   npm-cache:
-  playwright-cache:
   # Shared across every project (note: external — create once with
   # `podman volume create persist`). Holds cross-rebuild scratch and your
   # seeded ~/.ssh. devcontainer-rebuild.sh creates it for you.

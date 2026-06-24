@@ -2,3 +2,8 @@
 node_modules/
 logs/
 dist/
+
+# migrate-volumes.sh backup output — contains auth tokens and the encrypted
+# SSH key. Never commit. (Default dir is ./volume-backup; *.tar covers custom dirs.)
+volume-backup/
+*.tar
