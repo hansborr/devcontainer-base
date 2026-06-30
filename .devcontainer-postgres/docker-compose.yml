@@ -10,6 +10,7 @@ services:
       - ../:/workspace:z
       - claude-config:/home/node/.claude:U
       - codex-config:/home/node/.codex:U
+      - copilot-config:/home/node/.copilot:U
       - shell-history:/commandhistory:U
       - npm-cache:/home/node/.npm:U
       - persist:/home/node/persist:U
@@ -60,6 +61,7 @@ volumes:
   postgres-data:
   claude-config:
   codex-config:
+  copilot-config:
   shell-history:
   npm-cache:
   # Shared across every project (note: external — create once with

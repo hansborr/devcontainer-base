@@ -77,8 +77,8 @@ RUN mkdir /commandhistory \
 ENV DEVCONTAINER=true
 
 # Create workspace and config directories and set permissions
-RUN mkdir -p /workspace /home/node/.claude /home/node/.codex && \
-  chown -R node:node /workspace /home/node/.claude /home/node/.codex
+RUN mkdir -p /workspace /home/node/.claude /home/node/.codex /home/node/.copilot && \
+  chown -R node:node /workspace /home/node/.claude /home/node/.codex /home/node/.copilot
 
 WORKDIR /workspace
 
@@ -154,6 +154,19 @@ RUN CODEX_HOME=/home/node/.codex-dist \
 # overrides the ~/.codex default. The binary + bundled rg/bwrap stay in the image at
 # /home/node/.codex-dist/packages/standalone/current/{bin/codex,codex-path/rg,codex-resources/bwrap}.
 ENV CODEX_HOME=/home/node/.codex
+
+# Install GitHub Copilot CLI via the standalone installer. Unlike Codex, the
+# release is a SINGLE self-contained binary: the installer just extracts
+# `copilot` into $PREFIX/bin, which for a non-root user defaults to
+# $HOME/.local/bin — already on PATH (set above for codex) and in the image
+# layer, so it survives rebuilds and is never shadowed by a runtime volume.
+# Because that dir is already on PATH, the installer's post-install `command -v`
+# check passes and it skips the interactive "add to PATH?" prompt (no tty
+# needed). Runtime state (auth, config, history, MCP config) lives in ~/.copilot
+# — a persistent volume — so `copilot` logins survive rebuilds, mirroring
+# ~/.claude and ~/.codex. `copilot update` would refresh the binary but, like
+# the other agents, the image rebuild is the durable update path.
+RUN curl -fsSL https://gh.io/copilot-install | bash
 
 # Make ~/.ssh resolve to the shared 'persist' volume (seed it once on the host with
 # seed-ssh-key.sh). Keeps the encrypted key out of the image and avoids relabeling
@@ -256,10 +269,11 @@ RUN printf '\n%s\n%s\n' \
       '# Ensure shared persist cache/worktree dirs exist for shell-launched tools' \
       '[ -x /usr/local/bin/init-persist-dirs.sh ] && /usr/local/bin/init-persist-dirs.sh 2>/dev/null || true' \
       >> /home/node/.zshenv && \
-    printf '\n%s\n%s\n%s\n' \
+    printf '\n%s\n%s\n%s\n%s\n' \
       '# Sandbox devcontainer: default the agents to skip-prompt modes' \
       "alias claude='claude --dangerously-skip-permissions'" \
       "alias codex='codex --yolo'" \
+      "alias copilot='copilot --allow-all'" \
       >> /home/node/.zshrc && \
     printf '\n%s\n%s\n%s\n' \
       '# Worktree / cross-project clone helpers (cd into the created path)' \

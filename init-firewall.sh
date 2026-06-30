@@ -64,6 +64,13 @@ if ! echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null; then
     exit 1
 fi
 
+# Aggregate GitHub's published ranges. We fold in the `.copilot` section
+# alongside web/api/git so the GitHub Copilot CLI works: api.githubcopilot.com
+# sits in 140.82.112.0/20 (already in web/api), but the Azure-hosted
+# copilot-proxy.githubusercontent.com (138.91.182.224) is ONLY in `.copilot`.
+# The copilot section's IPv6 ranges duplicate ones already in web/api/git and
+# are dropped by `aggregate` (IPv4-only), same as today. `+ .copilot` is a safe
+# no-op (jq treats array + null as the array) if GitHub ever drops the section.
 echo "Processing GitHub IPs..."
 while read -r cidr; do
     if [[ ! "$cidr" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
@@ -72,7 +79,7 @@ while read -r cidr; do
     fi
     echo "Adding GitHub range $cidr"
     ipset add --exist allowed-domains "$cidr"
-done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
+done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git + .copilot)[]' | aggregate -q)
 
 # Resolve and add allowed domains
 # Required domains: failure aborts startup
