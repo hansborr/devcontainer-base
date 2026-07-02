@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Back up / restore the Podman volumes that hold your Claude + Codex state (auth,
+# Back up / restore the Podman volumes that hold your Claude + Codex + Copilot state (auth,
 # conversation history, settings, memory) and the shared 'persist' scratch volume
 # (which also carries your seeded ~/.ssh) — for moving to another machine.
 #
@@ -29,7 +29,7 @@ set -euo pipefail
 # Only auth/config/history volumes are carried — not Postgres/Redis or caches.
 PROJECTS=(musi matoki)
 GLOBALS=(persist)
-TYPES='claude-config|codex-config|shell-history|bash-history'
+TYPES='claude-config|codex-config|copilot-config|shell-history|bash-history'
 
 matching_volumes() {
     local proj glob pattern
