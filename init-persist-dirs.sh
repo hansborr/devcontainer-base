@@ -8,6 +8,7 @@ for d in \
   cache/pnpm \
   cache/bun \
   cache/sccache \
+  cache/ms-playwright \
   worktrees \
   clones
 do

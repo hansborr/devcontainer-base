@@ -187,7 +187,7 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
 RUN if [ "$INSTALL_RUST" = "true" ]; then \
       . "$HOME/.cargo/env" && \
       curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash && \
-      cargo binstall -y --no-symlinks sccache just cargo-nextest; \
+      cargo binstall -y --no-symlinks sccache just cargo-nextest cargo-insta; \
     fi
 ENV RUSTC_WRAPPER=sccache
 ENV SCCACHE_DIR=/home/node/persist/cache/sccache
@@ -227,9 +227,10 @@ COPY init-firewall.sh fw-install.sh ssh-agent-init.sh init-persist-dirs.sh /usr/
 COPY fw.sh /usr/local/bin/fw
 COPY wt.sh /usr/local/bin/wt
 COPY refclone.sh /usr/local/bin/refclone
+COPY playwright-provision.sh /usr/local/bin/playwright-provision
 COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/fw /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/fw /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone /usr/local/bin/playwright-provision && \
   chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh, /usr/local/bin/fw" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
@@ -246,16 +247,28 @@ RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 # prefix above ::/0 makes getaddrinfo return 127.0.0.1 ahead of ::1.
 RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 
-# Install Playwright system dependencies and browser binaries.
-# Browsers land in the default ~/.cache/ms-playwright and live in the IMAGE LAYER
-# on purpose (same anti-shadowing logic as Codex's .codex-dist above): do NOT mount
-# a volume over ~/.cache/ms-playwright. A volume there would shadow this baked
-# Chromium and pin a stale build across base rebuilds — and the image layer is
-# already shared across every project FROM this base (better dedup than a
-# per-project volume). Refreshed whenever the base image is rebuilt.
-RUN npx -y playwright install-deps && npx -y playwright install chromium && npm install -g @playwright/cli@latest
+# Install Playwright's SYSTEM dependencies (apt libs the browsers link against)
+# and a global `playwright` CLI. We deliberately do NOT bake the browser BINARIES
+# here: a single baked build can't satisfy downstream projects that pin different
+# Playwright versions (the browser build number is tied to the Playwright
+# version), and the binaries would land in root's cache anyway (this RUN is USER
+# root, for install-deps' apt). Instead the browsers are persist-routed (symlink
+# below) and fetched per-project by `playwright-provision` from the Chrome-for-
+# Testing GCS bucket — cdn.playwright.dev is CDN-fronted and unreachable through
+# init-firewall.sh's IP-pinned allowlist. See playwright-provision.sh.
+RUN npx -y playwright install-deps && npm install -g @playwright/cli@latest
 
 USER node
+
+# Route the Playwright browser cache onto the shared 'persist' volume (like
+# ~/.ssh above): a browser provisioned once survives rebuilds, and different revs
+# coexist / dedupe across projects (Playwright namespaces cache dirs by build
+# number). The symlink target is created at runtime by init-persist-dirs.sh —
+# dangling at build time is fine because persist is a runtime volume. Provision
+# with `playwright-provision` from inside a project (wire it into postCreate / a
+# `just` recipe / a doctor check).
+RUN mkdir -p /home/node/.cache && \
+    ln -sfn /home/node/persist/cache/ms-playwright /home/node/.cache/ms-playwright
 
 # Bake the shared ssh-agent hook into ~/.zshenv (sourced by every zsh, including
 # Claude Code's non-interactive Bash tool) and the agent aliases into ~/.zshrc
