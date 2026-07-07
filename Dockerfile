@@ -85,7 +85,7 @@ WORKDIR /workspace
 ARG GIT_DELTA_VERSION=0.18.2
 RUN ARCH=$(dpkg --print-architecture) && \
   wget "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
-  sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
+  dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
   rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
 # Install hadolint (Dockerfile linter)
@@ -96,7 +96,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
   chmod +x /usr/local/bin/hadolint
 
 # Install Python CLI tools
-RUN pip install --break-system-packages codespell yamllint
+RUN pip install --no-cache-dir --break-system-packages codespell yamllint
 
 # Enable pnpm via corepack (needs root for /usr/local/bin symlinks)
 RUN corepack enable && corepack install -g pnpm@latest
@@ -217,23 +217,13 @@ RUN if [ "$INSTALL_RUST" = "true" ]; then \
       ln -sfn /home/node/persist/cache/cargo/git /home/node/.cargo/git; \
     fi
 
-# User-global rust-analyzer config (memory/CPU caps). Lives in the image layer,
-# so it applies to every Rust project and survives rebuilds.
-COPY --chown=node:node rust-analyzer.toml /home/node/.config/rust-analyzer/rust-analyzer.toml
-
-# Copy and set up firewall scripts + the shared ssh-agent bootstrap + shared
-# persist runtime dirs + the worktree / cross-project clone helpers.
-COPY init-firewall.sh fw-install.sh ssh-agent-init.sh init-persist-dirs.sh /usr/local/bin/
-COPY fw.sh /usr/local/bin/fw
-COPY wt.sh /usr/local/bin/wt
-COPY refclone.sh /usr/local/bin/refclone
-COPY playwright-provision.sh /usr/local/bin/playwright-provision
-COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
+# --- Layer ordering: the root section below runs stable, EXPENSIVE layers
+# (apt conf, gai.conf, Playwright system deps) BEFORE the frequently-edited
+# script COPYs, so tweaking init-firewall.sh & co. never invalidates the
+# hundreds-of-MB install-deps layer. Keep new cheap/volatile layers after the
+# Playwright RUN. ---
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/fw /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone /usr/local/bin/playwright-provision && \
-  chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh, /usr/local/bin/fw" > /etc/sudoers.d/node-firewall && \
-  chmod 0440 /etc/sudoers.d/node-firewall
+
 # Force IPv4 for apt (IPv6 is unreliable in rootless Podman containers)
 RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
@@ -258,7 +248,24 @@ RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 # init-firewall.sh's IP-pinned allowlist. See playwright-provision.sh.
 RUN npx -y playwright install-deps && npm install -g @playwright/cli@latest
 
+# Copy and set up firewall scripts + the shared ssh-agent bootstrap + shared
+# persist runtime dirs + the worktree / cross-project clone helpers.
+COPY init-firewall.sh fw-install.sh ssh-agent-init.sh init-persist-dirs.sh /usr/local/bin/
+COPY fw.sh /usr/local/bin/fw
+COPY wt.sh /usr/local/bin/wt
+COPY refclone.sh /usr/local/bin/refclone
+COPY playwright-provision.sh /usr/local/bin/playwright-provision
+COPY ssh_config_github.conf /etc/ssh/ssh_config.d/10-devcontainer.conf
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/fw-install.sh /usr/local/bin/fw /usr/local/bin/ssh-agent-init.sh /usr/local/bin/init-persist-dirs.sh /usr/local/bin/wt /usr/local/bin/refclone /usr/local/bin/playwright-provision && \
+  chmod 0644 /etc/ssh/ssh_config.d/10-devcontainer.conf && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/local/bin/fw-install.sh, /usr/local/bin/fw" > /etc/sudoers.d/node-firewall && \
+  chmod 0440 /etc/sudoers.d/node-firewall
+
 USER node
+
+# User-global rust-analyzer config (memory/CPU caps). Lives in the image layer,
+# so it applies to every Rust project and survives rebuilds.
+COPY --chown=node:node rust-analyzer.toml /home/node/.config/rust-analyzer/rust-analyzer.toml
 
 # Route the Playwright browser cache onto the shared 'persist' volume (like
 # ~/.ssh above): a browser provisioned once survives rebuilds, and different revs
