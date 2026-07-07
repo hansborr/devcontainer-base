@@ -99,7 +99,7 @@ systemctl --user restart dolt.service
 
 # Health gate: container running + both ports (SQL 3306 loopback, remotesapi 50051) live.
 ok=0
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   if [ "$(podman inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null)" = running ] \
      && (exec 3<>/dev/tcp/127.0.0.1/3306) 2>/dev/null \
      && (exec 3<>/dev/tcp/"$TS_IP"/50051) 2>/dev/null; then

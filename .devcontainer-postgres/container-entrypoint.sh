@@ -13,7 +13,7 @@ done
 mkdir -p /workspace/logs
 
 if [ -d /workspace/node_modules ]; then
-  cd /workspace
+  cd /workspace || exit 1
   npm run dev >> /workspace/logs/dev-servers.log 2>&1 &
   echo "$(date -Iseconds): dev servers started (PID $!)" >> /workspace/logs/dev-servers.log
 else

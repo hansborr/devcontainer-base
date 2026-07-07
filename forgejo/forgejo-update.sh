@@ -64,8 +64,7 @@ snapshot_volume() {  # caller stops the service first so this is a *consistent* 
 }
 
 wait_health() {  # poll the API for up to ~60s
-  local i
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     curl -fsS "$HEALTH_URL" >/dev/null 2>&1 && return 0
     sleep 2
   done
@@ -140,8 +139,7 @@ update_runner() {
   echo "  restarting forgejo-runner.service ..."
   systemctl --user restart forgejo-runner.service
   # Registration lives on the forgejo-runner-data volume, not the image, so no re-register.
-  local i
-  for i in $(seq 1 20); do
+  for _ in $(seq 1 20); do
     if [ "$(systemctl --user is-active forgejo-runner.service)" = active ] \
        && podman logs --tail 30 forgejo-runner 2>&1 | grep -q 'declared successfully'; then
       echo "  OK — runner reconnected:"

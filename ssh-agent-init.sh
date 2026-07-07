@@ -1,3 +1,6 @@
+# shellcheck shell=bash
+# (no shebang: this file is SOURCED, by zsh — bash is the closest dialect
+# the linter understands, hence the directive above.)
 # ssh-agent-init.sh — baked into the base devcontainer image at
 # /usr/local/bin/. Sourced from ~/.zshenv so EVERY entry point into the
 # container shares ONE ssh-agent on a FIXED socket: interactive `podman exec`

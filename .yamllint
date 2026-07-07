@@ -1,0 +1,6 @@
+# yamllint config for this repo (auto-discovered by lint-checks.sh / CI).
+extends: relaxed
+rules:
+  # 80 is too tight for the comment-heavy compose/config files here.
+  line-length:
+    max: 120

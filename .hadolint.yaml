@@ -1,0 +1,22 @@
+# hadolint config for this repo (used by lint-checks.sh / CI).
+# Each ignore below is a deliberate repo-wide policy, not an oversight:
+ignored:
+  - DL3007  # FROM :latest — project/runner Dockerfiles build FROM the locally
+            # built claude-devcontainer:latest base ON PURPOSE; there is no
+            # registry tag to pin.
+  - DL3008  # apt pins — the dev sandbox tracks distro-latest packages; pinned
+            # versions would rot and break rebuilds.
+  - DL3013  # pip pins — same rolling-latest policy.
+  - DL3016  # npm pins — same rolling-latest policy.
+  - DL4001  # wget AND curl both used: wget for plain downloads, curl for
+            # piped vendor installers, matching each vendor's documented cmd.
+  - DL4006  # SHELL pipefail — the pipes are vendor `curl | bash` installers
+            # whose curl failure surfaces as an installer failure anyway;
+            # switching the global SHELL to bash is a bigger behavior change
+            # than the risk warrants.
+  - DL3047  # wget progress bar noise in build logs — irrelevant here.
+  - DL3059  # consecutive RUNs are deliberate: layer-cache granularity is
+            # tuned by hand (see the layer-ordering comment in Dockerfile).
+  - SC2016  # single-quoted $ in echo/printf lines is literal on purpose
+            # (writing shell snippets into .zshenv/.zshrc).
+  - SC1091  # sourced files (~/.cargo/env) don't exist at lint time.

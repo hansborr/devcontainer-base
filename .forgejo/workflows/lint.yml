@@ -1,0 +1,15 @@
+# Lint on every push. `runs-on` must match the runner label registered in
+# forgejo/runner/config.yml (`devcontainer:host` — host executor: steps run
+# in a shell inside the runner container, no per-job isolation). The runner
+# image is built FROM the dev base image, so shellcheck/hadolint/yamllint and
+# node (needed by actions/checkout) are already present — no installs here.
+name: lint
+on: [push]
+
+jobs:
+  lint:
+    runs-on: devcontainer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run lint checks
+        run: ./lint-checks.sh
