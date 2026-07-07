@@ -23,19 +23,21 @@ set -euo pipefail
 # NOTE: the backup tars contain your auth tokens and (for 'persist') your
 # encrypted SSH key. Treat the backup directory as sensitive.
 
-# Allowlist of what to migrate. PROJECTS are compose project names (namespaced
-# by each repo's .env PROJECT_NAME, e.g. musi -> musi_claude-config); add a
-# project here as you create one. GLOBALS are exact, unnamespaced volume names.
-# Only auth/config/history volumes are carried — not Postgres/Redis or caches.
-PROJECTS=(musi matoki)
+# What to migrate is DISCOVERED, not allowlisted: any volume named
+# <project>_<type> (compose-namespaced, e.g. musi_claude-config; the minimal
+# template namespaces the same way via ${localWorkspaceFolderBasename}) or a
+# bare <type> (volumes from the minimal template before it namespaced), plus
+# the exact GLOBALS. Over-including is the right bias for a backup tool — a
+# new project needs no edit here. Only auth/config/history volumes are
+# carried, not Postgres/Redis data or caches (npm-cache is deliberately
+# excluded from TYPES: it's a rebuildable cache).
 GLOBALS=(persist)
 TYPES='claude-config|codex-config|copilot-config|shell-history|bash-history'
 
 matching_volumes() {
-    local proj glob pattern
-    proj=$(IFS='|'; echo "${PROJECTS[*]}")
+    local glob pattern
     glob=$(IFS='|'; echo "${GLOBALS[*]}")
-    pattern="^(${proj})_(${TYPES})\$|^(${glob})\$"
+    pattern="^([a-z0-9][a-z0-9-]*_)?(${TYPES})\$|^(${glob})\$"
     podman volume ls --format '{{.Name}}' | grep -E "$pattern" || true
 }
 
