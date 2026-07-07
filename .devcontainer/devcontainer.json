@@ -12,12 +12,12 @@
     "--userns=keep-id"
   ],
   "mounts": [
-    "source=/tmp/devcontainer,target=/tmp,type=bind,relabel=shared",
-    "source=claude-config,target=/home/node/.claude,type=volume,U=true",
-    "source=codex-config,target=/home/node/.codex,type=volume,U=true",
-    "source=copilot-config,target=/home/node/.copilot,type=volume,U=true",
-    "source=shell-history,target=/commandhistory,type=volume,U=true",
-    "source=npm-cache,target=/home/node/.npm,type=volume,U=true",
+    "source=/tmp/devcontainer-${localWorkspaceFolderBasename},target=/tmp,type=bind,relabel=shared",
+    "source=${localWorkspaceFolderBasename}_claude-config,target=/home/node/.claude,type=volume,U=true",
+    "source=${localWorkspaceFolderBasename}_codex-config,target=/home/node/.codex,type=volume,U=true",
+    "source=${localWorkspaceFolderBasename}_copilot-config,target=/home/node/.copilot,type=volume,U=true",
+    "source=${localWorkspaceFolderBasename}_shell-history,target=/commandhistory,type=volume,U=true",
+    "source=${localWorkspaceFolderBasename}_npm-cache,target=/home/node/.npm,type=volume,U=true",
     "source=persist,target=/home/node/persist,type=volume,U=true",
     "source=${localEnv:HOME}/repos,target=/home/node/repos,type=bind,readonly,relabel=shared",
     "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly,relabel=shared"
@@ -49,7 +49,7 @@
       }
     }
   },
-  "initializeCommand": "mkdir -p /tmp/devcontainer && chmod 1777 /tmp/devcontainer",
+  "initializeCommand": "mkdir -p /tmp/devcontainer-${localWorkspaceFolderBasename} && chmod 1777 /tmp/devcontainer-${localWorkspaceFolderBasename}",
   "remoteUser": "node",
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",

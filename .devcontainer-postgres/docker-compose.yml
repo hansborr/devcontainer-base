@@ -25,6 +25,10 @@ services:
     ports:
       - "127.0.0.1:3000:3000"   # App server — adjust to match your project
       - "127.0.0.1:5173:5173"   # Vite dev server
+    # Default must match the base image's TZ build ARG: a bare ${TZ} would set
+    # an EMPTY TZ (= UTC) whenever .env omits it, overriding the baked value.
+    environment:
+      TZ: ${TZ:-America/Chicago}
     init: true
     userns_mode: "keep-id"
     cap_add:
@@ -41,6 +45,7 @@ services:
     pull_policy: missing
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-America/Chicago}
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
