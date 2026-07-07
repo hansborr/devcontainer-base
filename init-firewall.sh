@@ -40,10 +40,10 @@ fi
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
 # Allow inbound DNS responses
 iptables -A INPUT -p udp --sport 53 -j ACCEPT
-# Allow outbound SSH
-iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
-# Allow inbound SSH responses
-iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
+# NOTE: deliberately NO global tcp/22 allow — it would defeat the egress
+# allowlist (ssh/scp/tunnel to any host). GitHub SSH is covered by the
+# allowed-domains ipset (matched on all ports) and devbox SSH by its
+# port-2222 rule below; for ad-hoc SSH elsewhere use `sudo fw off`.
 # Allow localhost
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
@@ -51,16 +51,26 @@ iptables -A OUTPUT -o lo -j ACCEPT
 # Create ipset with CIDR support
 ipset create allowed-domains hash:net
 
-# Fetch GitHub meta information and aggregate + add their IP ranges
+# Fetch GitHub meta information and aggregate + add their IP ranges.
+# The unauthenticated /meta endpoint is rate-limited (60 req/hr/IP), and an
+# abort here kills postStartCommand and blocks container start — so retry,
+# then fall back to the last-good copy cached on the persist volume.
+GH_META_CACHE=/home/node/persist/cache/github-meta.json
 echo "Fetching GitHub IP ranges..."
-gh_ranges=$(curl -s https://api.github.com/meta)
-if [ -z "$gh_ranges" ]; then
-    echo "ERROR: Failed to fetch GitHub IP ranges"
-    exit 1
-fi
-
-if ! echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null; then
-    echo "ERROR: GitHub API response missing required fields"
+gh_ranges=$(curl -fsSL --retry 3 --retry-delay 2 https://api.github.com/meta || true)
+if [ -n "$gh_ranges" ] && echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null 2>&1; then
+    # Cache the last-good copy. This script runs as root and may precede
+    # init-persist-dirs.sh, so create the cache dir node-owned to keep later
+    # toolchain writes into persist/cache working.
+    if install -d -o node -g node "${GH_META_CACHE%/*}" 2>/dev/null; then
+        tmp=$(mktemp) && printf '%s\n' "$gh_ranges" > "$tmp" && chmod 0644 "$tmp" \
+            && mv "$tmp" "$GH_META_CACHE" || true
+    fi
+elif [ -s "$GH_META_CACHE" ] && jq -e '.web and .api and .git' "$GH_META_CACHE" >/dev/null 2>&1; then
+    echo "WARN: live GitHub /meta fetch failed — using cached copy $GH_META_CACHE"
+    gh_ranges=$(cat "$GH_META_CACHE")
+else
+    echo "ERROR: GitHub /meta unavailable and no valid cache at $GH_META_CACHE"
     exit 1
 fi
 

@@ -25,8 +25,15 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Re-secure on ANY exit: clean finish, apt failure, or interrupt.
-trap '/usr/local/bin/init-firewall.sh' EXIT
+# Re-secure on ANY exit: clean finish, apt failure, or interrupt. If the
+# re-apply itself fails (e.g. GitHub /meta unreachable partway through, after
+# rules were already flushed), fail CLOSED and loud: force the default OUTPUT
+# policy to DROP so the sandbox never sits silently open until `sudo fw on`
+# succeeds.
+trap 'if ! /usr/local/bin/init-firewall.sh; then
+        echo "CRITICAL: firewall re-apply FAILED — forcing egress DROP. Fix and run: sudo fw on" >&2
+        iptables -P OUTPUT DROP
+      fi' EXIT
 
 /usr/local/bin/fw off >/dev/null
 echo "Firewall opened. Installing: $*"
