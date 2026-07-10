@@ -77,8 +77,8 @@ RUN mkdir /commandhistory \
 ENV DEVCONTAINER=true
 
 # Create workspace and config directories and set permissions
-RUN mkdir -p /workspace /home/node/.claude /home/node/.codex /home/node/.copilot && \
-  chown -R node:node /workspace /home/node/.claude /home/node/.codex /home/node/.copilot
+RUN mkdir -p /workspace /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.cursor /home/node/.config/cursor && \
+  chown -R node:node /workspace /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.cursor /home/node/.config
 
 WORKDIR /workspace
 
@@ -167,6 +167,17 @@ ENV CODEX_HOME=/home/node/.codex
 # ~/.claude and ~/.codex. `copilot update` would refresh the binary but, like
 # the other agents, the image rebuild is the durable update path.
 RUN curl -fsSL https://gh.io/copilot-install | bash
+
+# Install Cursor CLI (cursor-agent) via the standalone installer. Like Codex,
+# the versioned binary lands in an image-layer dir — ~/.local/share/
+# cursor-agent/versions/<ver> — with launcher symlinks `agent` (primary) and
+# `cursor-agent` (legacy) in ~/.local/bin (already on PATH), so it refreshes
+# on image rebuilds and is never shadowed by a runtime volume. Runtime state
+# is SPLIT across two volumes: ~/.cursor (config, chat history, skills — the
+# cursor-config volume) and ~/.config/cursor (auth.json login token — the
+# cursor-auth volume). Persisting only ~/.cursor looks like it works until
+# the next rebuild asks you to log in again.
+RUN curl https://cursor.com/install -fsS | bash
 
 # Make ~/.ssh resolve to the shared 'persist' volume (seed it once on the host with
 # seed-ssh-key.sh). Keeps the encrypted key out of the image and avoids relabeling
@@ -289,11 +300,13 @@ RUN printf '\n%s\n%s\n' \
       '# Ensure shared persist cache/worktree dirs exist for shell-launched tools' \
       '[ -x /usr/local/bin/init-persist-dirs.sh ] && /usr/local/bin/init-persist-dirs.sh 2>/dev/null || true' \
       >> /home/node/.zshenv && \
-    printf '\n%s\n%s\n%s\n%s\n' \
+    printf '\n%s\n%s\n%s\n%s\n%s\n%s\n' \
       '# Sandbox devcontainer: default the agents to skip-prompt modes' \
       "alias claude='claude --dangerously-skip-permissions'" \
       "alias codex='codex --yolo'" \
       "alias copilot='copilot --allow-all'" \
+      "alias agent='agent --force'" \
+      "alias cursor-agent='cursor-agent --force'" \
       >> /home/node/.zshrc && \
     printf '\n%s\n%s\n%s\n' \
       '# Worktree / cross-project clone helpers (cd into the created path)' \

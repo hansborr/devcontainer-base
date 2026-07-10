@@ -121,6 +121,29 @@ OPTIONAL_DOMAINS=(
     "ab.chatgpt.com"
     "pypi.org"
     "files.pythonhosted.org"
+    # Cursor CLI: agent API (api2/api3/api4), codebase indexing (repo42),
+    # login (cursor.com + authenticator), self-update/installer (downloads).
+    # Some are Cloudflare-fronted, so edge IPs can rotate mid-session — same
+    # caveat as chatgpt.com; re-run `sudo fw on` if cursor goes EHOSTUNREACH.
+    "cursor.com"
+    "api2.cursor.sh"
+    "api3.cursor.sh"
+    "api4.cursor.sh"
+    "repo42.cursor.sh"
+    "authenticator.cursor.sh"
+    "downloads.cursor.com"
+    # Agent-request endpoints (docs list *.api5.cursor.sh — no wildcard
+    # support here, so the documented concrete names are enumerated; the
+    # bare api5/authentication apexes have no A records and are omitted)
+    # and the authentication/token-issuer hosts behind CLI login.
+    "agent.api5.cursor.sh"
+    "agentn.api5.cursor.sh"
+    "agent.us.api5.cursor.sh"
+    "agentn.us.api5.cursor.sh"
+    "agent.global.api5.cursor.sh"
+    "agentn.global.api5.cursor.sh"
+    "authenticate.cursor.sh"
+    "prod.authentication.cursor.sh"
 )
 
 resolve_and_add() {

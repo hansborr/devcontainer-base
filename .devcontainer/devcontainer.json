@@ -16,6 +16,8 @@
     "source=${localWorkspaceFolderBasename}_claude-config,target=/home/node/.claude,type=volume,U=true",
     "source=${localWorkspaceFolderBasename}_codex-config,target=/home/node/.codex,type=volume,U=true",
     "source=${localWorkspaceFolderBasename}_copilot-config,target=/home/node/.copilot,type=volume,U=true",
+    "source=${localWorkspaceFolderBasename}_cursor-config,target=/home/node/.cursor,type=volume,U=true",
+    "source=${localWorkspaceFolderBasename}_cursor-auth,target=/home/node/.config/cursor,type=volume,U=true",
     "source=${localWorkspaceFolderBasename}_shell-history,target=/commandhistory,type=volume,U=true",
     "source=${localWorkspaceFolderBasename}_npm-cache,target=/home/node/.npm,type=volume,U=true",
     "source=persist,target=/home/node/persist,type=volume,U=true",

@@ -11,6 +11,10 @@ services:
       - claude-config:/home/node/.claude:U
       - codex-config:/home/node/.codex:U
       - copilot-config:/home/node/.copilot:U
+      # Cursor splits its state: ~/.cursor holds config/chats/skills, but the
+      # login token lives in ~/.config/cursor/auth.json — hence two volumes.
+      - cursor-config:/home/node/.cursor:U
+      - cursor-auth:/home/node/.config/cursor:U
       - shell-history:/commandhistory:U
       - npm-cache:/home/node/.npm:U
       - persist:/home/node/persist:U
@@ -67,6 +71,8 @@ volumes:
   claude-config:
   codex-config:
   copilot-config:
+  cursor-config:
+  cursor-auth:
   shell-history:
   npm-cache:
   # Shared across every project (note: external — create once with
