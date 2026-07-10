@@ -12,7 +12,7 @@
     "--userns=keep-id"
   ],
   "mounts": [
-    "source=/tmp/devcontainer-${localWorkspaceFolderBasename},target=/tmp,type=bind,relabel=shared",
+    "source=/var/tmp/devcontainer-${localWorkspaceFolderBasename},target=/tmp,type=bind,relabel=shared",
     "source=${localWorkspaceFolderBasename}_claude-config,target=/home/node/.claude,type=volume,U=true",
     "source=${localWorkspaceFolderBasename}_codex-config,target=/home/node/.codex,type=volume,U=true",
     "source=${localWorkspaceFolderBasename}_copilot-config,target=/home/node/.copilot,type=volume,U=true",
@@ -51,7 +51,7 @@
       }
     }
   },
-  "initializeCommand": "mkdir -p /tmp/devcontainer-${localWorkspaceFolderBasename} && chmod 1777 /tmp/devcontainer-${localWorkspaceFolderBasename}",
+  "initializeCommand": "mkdir -p /var/tmp/devcontainer-${localWorkspaceFolderBasename} && chmod 1777 /var/tmp/devcontainer-${localWorkspaceFolderBasename}",
   "remoteUser": "node",
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",

@@ -23,7 +23,9 @@ services:
       # large trees is slow.
       - ${HOME}/repos:/home/node/repos:ro,z
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro,z
-      - /tmp/${PROJECT_NAME:-myproject}:/tmp:z
+      # Disk-backed (host /tmp is a small tmpfs); systemd-tmpfiles ages /var/tmp
+      # after 30 days idle, so scratch still gets garbage-collected.
+      - /var/tmp/devcontainer-${PROJECT_NAME:-myproject}:/tmp:z
     # Bind to loopback only: these are reachable from this host (and over the
     # VS Code / devcontainer port-forward) but never published to the LAN.
     ports:
